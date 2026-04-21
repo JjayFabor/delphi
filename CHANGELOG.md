@@ -4,6 +4,41 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.7.0] — Skills & Sub-agents — 2026-04-21
+
+### Added
+- `agents/main/skills.py` — skill loader; skills are markdown files in `agents/main/skills/`
+- Four skill SDK tools: `skill_list`, `skill_read`, `skill_write`, `skill_delete`
+- Skills injected into system prompt on every turn via `build_system_prompt()` — no restart required
+- `agents/main/subagents.py` — sub-agent registry and async runner
+- Three sub-agent SDK tools: `subagent_list`, `subagent_create`, `subagent_run`
+- Sub-agents get own workspace (`workspaces/<name>/`), system prompt (`agents/<name>/CLAUDE.md`), and tool config (`agents/<name>/config.json`)
+- `CLAUDE.md` — added skills and sub-agent workflow instructions
+
+## [0.6.1] — Connectors — 2026-04-21
+
+### Added
+- `agents/main/connectors.py` — registry of 12 connectors (GitHub, HubSpot, Slack, Linear, Notion, Google Drive/Gmail/Calendar, Postgres, SQLite, Stripe, Jira) with install/remove functions
+- Four in-process SDK tools: `connector_list`, `connector_add`, `connector_remove`, `connector_info`
+- `/restart` Telegram command — sends confirmation then restarts via systemd or os.execv
+- Auto-restart after successful `connector_add` or `connector_remove` — bot restarts once reply is delivered
+- `MAIN_EXTRA_TOOLS` env var — set to `*` (default) to allow all MCP tools; comma-separate specific names to restrict
+- `docs/connectors.md` — manual setup reference
+- `.env.example` connectors section — credential placeholders
+
+### Changed
+- `run_claude()` uses `_build_allowed_tools()` — dynamic tool list instead of hardcoded array
+- `CLAUDE.md` — added connector workflow instructions (collect credentials → connector_add → auto-restart)
+
+## [0.6.0] — Phase 6 — 2026-04-21
+
+### Added
+- `systemd/claude-backup.service` + `claude-backup.timer` — daily backup at 02:00, runs `scripts/backup.sh`
+- `scripts/install-systemd.sh` — idempotent installer: copies all units, enables linger, enables + starts services
+- Startup/restart notification — bot sends "Main is online." to all allowed user IDs on every start via `post_init` hook
+- `/status` command — shows uptime, active session count, MEMORY.md size, today's daily note size
+- `scripts/setup.py` — added systemd install step (interactive, calls `install-systemd.sh`)
+
 ## [0.4.0] — Phase 4 — 2026-04-21
 
 ### Added

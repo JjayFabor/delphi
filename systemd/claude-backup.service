@@ -1,0 +1,10 @@
+[Unit]
+Description=Claude Command Center — Daily backup
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/JjayFiles/claude-command-center
+ExecStart=%h/JjayFiles/claude-command-center/scripts/backup.sh
+
+StandardOutput=append:%h/JjayFiles/claude-command-center/logs/backup.log
+StandardError=append:%h/JjayFiles/claude-command-center/logs/backup.log

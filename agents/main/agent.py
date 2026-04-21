@@ -9,12 +9,20 @@ import html
 import logging
 import os
 import re
+import shutil
 import sqlite3
+import subprocess
 import sys
+import time
 from datetime import date
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Optional
+
+_start_time = time.time()
+_restart_requested = False
+_mcp_ready_event: Optional[asyncio.Event] = None
+_MCP_PROBE_TIMEOUT = 60  # seconds to wait for MCP init before giving up
 
 from dotenv import load_dotenv
 from telegram import Update
@@ -32,6 +40,17 @@ DB_PATH = ROOT / "data" / "memory.db"
 LOG_PATH = ROOT / "logs" / "main.log"
 
 sys.path.insert(0, str(ROOT))
+
+from agents.main.connectors import (
+    list_connectors,
+    get_connector_info,
+    get_installed_connectors,
+    add_connector,
+    remove_connector,
+    REGISTRY as CONNECTOR_REGISTRY,
+)
+from agents.main import skills as _skills_mod
+from agents.main.subagents import list_subagents, create_subagent, run_subagent
 
 # ── Logging ────────────────────────────────────────────────────────────────────
 LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -59,6 +78,25 @@ ALLOWED_CHAT_IDS: set[int] = {
 }
 
 TG_MAX_CHARS = 4000
+
+# ── Tool allowlist ─────────────────────────────────────────────────────────────
+# MAIN_EXTRA_TOOLS in .env: comma-separated tool names to add on top of base set.
+# Set to "*" to allow every tool (all MCP connectors, no restriction).
+_BASE_TOOLS = [
+    "Bash", "Read", "Write", "Edit", "Glob", "Grep",
+    "WebSearch", "WebFetch", "TodoWrite",
+    "memory_search", "memory_write_long_term", "memory_write_daily", "memory_read_file",
+    "connector_list", "connector_add", "connector_remove", "connector_info",
+    "skill_list", "skill_read", "skill_write", "skill_delete",
+    "subagent_list", "subagent_create", "subagent_run",
+]
+
+def _build_allowed_tools() -> Optional[list[str]]:
+    extra_env = os.getenv("MAIN_EXTRA_TOOLS", "").strip()
+    if extra_env == "*":
+        return None  # unrestricted — all MCP tools available
+    extras = [t.strip() for t in extra_env.split(",") if t.strip()]
+    return _BASE_TOOLS + extras
 
 
 # ── Memory index (initialised in main()) ──────────────────────────────────────
@@ -150,10 +188,210 @@ async def tool_memory_read_file(args: dict) -> dict:
     return {"content": [{"type": "text", "text": text or "(empty)"}]}
 
 
-# ── MCP server bundling all memory tools ──────────────────────────────────────
+# ── Connector tools ───────────────────────────────────────────────────────────
+
+@sdk.tool(
+    name="connector_list",
+    description=(
+        "List all available connectors (MCP integrations) and whether each is installed. "
+        "Call this when the user asks what services Main can connect to, or to show connector status."
+    ),
+    input_schema={},
+)
+async def tool_connector_list(_args: dict) -> dict:
+    result = list_connectors()
+    return {"content": [{"type": "text", "text": result}]}
+
+
+@sdk.tool(
+    name="connector_add",
+    description=(
+        "Add an integration connector (GitHub, HubSpot, Slack, etc.) by registering the MCP server "
+        "and saving credentials to .env. Call this once you have collected all required credentials "
+        "from the user. Main will restart automatically after a successful add."
+    ),
+    input_schema={"name": str, "credentials": dict},
+)
+async def tool_connector_add(args: dict) -> dict:
+    global _restart_requested
+    name = args.get("name", "").strip()
+    credentials = args.get("credentials", {})
+    ok, msg = add_connector(name, credentials)
+    if ok:
+        _restart_requested = True
+    return {"content": [{"type": "text", "text": msg}], **({"is_error": True} if not ok else {})}
+
+
+@sdk.tool(
+    name="connector_remove",
+    description="Remove a previously added connector by name. Main will restart to apply the change.",
+    input_schema={"name": str},
+)
+async def tool_connector_remove(args: dict) -> dict:
+    global _restart_requested
+    name = args.get("name", "").strip()
+    ok, msg = remove_connector(name)
+    if ok:
+        _restart_requested = True
+    return {"content": [{"type": "text", "text": msg}], **({"is_error": True} if not ok else {})}
+
+
+@sdk.tool(
+    name="connector_info",
+    description=(
+        "Get setup instructions and required credentials for a specific connector. "
+        "Call this to find out what the user needs to provide before calling connector_add."
+    ),
+    input_schema={"name": str},
+)
+async def tool_connector_info(args: dict) -> dict:
+    name = args.get("name", "").strip().lower()
+    info = get_connector_info(name)
+    if not info:
+        known = ", ".join(CONNECTOR_REGISTRY.keys())
+        return {
+            "content": [{"type": "text", "text": f"Unknown connector '{name}'. Available: {known}"}],
+            "is_error": True,
+        }
+    lines = [f"Connector: {name}", f"Description: {info['description']}", ""]
+    if info["env_vars"]:
+        lines.append("Required credentials:")
+        for key, instructions in info["env_vars"].items():
+            lines.append(f"\n{key}:\n  {instructions}")
+    else:
+        lines.append("No credentials required — OAuth flow runs on first use.")
+    return {"content": [{"type": "text", "text": "\n".join(lines)}]}
+
+
+# ── Skill tools ───────────────────────────────────────────────────────────────
+
+@sdk.tool(
+    name="skill_list",
+    description="List all saved skills by name with a short preview of their content.",
+    input_schema={},
+)
+async def tool_skill_list(_args: dict) -> dict:
+    skills = _skills_mod.list_skills()
+    if not skills:
+        text = "No skills saved yet."
+    else:
+        text = "\n".join(f"• {s['name']}: {s['preview']}" for s in skills)
+    return {"content": [{"type": "text", "text": text}]}
+
+
+@sdk.tool(
+    name="skill_read",
+    description="Read the full content of a saved skill by name.",
+    input_schema={"name": str},
+)
+async def tool_skill_read(args: dict) -> dict:
+    content = _skills_mod.read_skill(args.get("name", ""))
+    if content is None:
+        return {"content": [{"type": "text", "text": "Skill not found."}], "is_error": True}
+    return {"content": [{"type": "text", "text": content}]}
+
+
+@sdk.tool(
+    name="skill_write",
+    description=(
+        "Create or update a skill. Skills are injected into the system prompt on every turn — "
+        "no restart needed. Use skills to encode domain knowledge, workflows, formatting rules, "
+        "or repeatable procedures. name should be a short slug (e.g. 'hubspot-targets')."
+    ),
+    input_schema={"name": str, "content": str},
+)
+async def tool_skill_write(args: dict) -> dict:
+    name = args.get("name", "").strip()
+    content = args.get("content", "").strip()
+    if not name or not content:
+        return {"content": [{"type": "text", "text": "name and content are required."}], "is_error": True}
+    filename = _skills_mod.write_skill(name, content)
+    return {"content": [{"type": "text", "text": f"Skill saved: {filename}"}]}
+
+
+@sdk.tool(
+    name="skill_delete",
+    description="Delete a saved skill by name.",
+    input_schema={"name": str},
+)
+async def tool_skill_delete(args: dict) -> dict:
+    deleted = _skills_mod.delete_skill(args.get("name", ""))
+    msg = f"Skill deleted." if deleted else "Skill not found."
+    return {"content": [{"type": "text", "text": msg}], **({"is_error": True} if not deleted else {})}
+
+
+# ── Sub-agent tools ────────────────────────────────────────────────────────────
+
+@sdk.tool(
+    name="subagent_list",
+    description="List all available sub-agents with their descriptions and tool configs.",
+    input_schema={},
+)
+async def tool_subagent_list(_args: dict) -> dict:
+    agents = list_subagents()
+    if not agents:
+        text = "No sub-agents defined yet."
+    else:
+        lines = []
+        for a in agents:
+            tools_str = ", ".join(a["tools"]) if a["tools"] else "all tools"
+            lines.append(f"• {a['name']}: {a['description']} ({tools_str})")
+        text = "\n".join(lines)
+    return {"content": [{"type": "text", "text": text}]}
+
+
+@sdk.tool(
+    name="subagent_create",
+    description=(
+        "Create a new sub-agent with its own workspace, system prompt, and tool set. "
+        "Sub-agents are specialists — give each a focused role and minimal tool set. "
+        "tools should be a list of tool names, or null to allow all tools."
+    ),
+    input_schema={"name": str, "description": str, "system_prompt": str, "tools": list},
+)
+async def tool_subagent_create(args: dict) -> dict:
+    name = args.get("name", "").strip()
+    description = args.get("description", "").strip()
+    system_prompt = args.get("system_prompt", "").strip()
+    tools = args.get("tools") or None  # empty list → None (all tools)
+    if not name or not system_prompt:
+        return {"content": [{"type": "text", "text": "name and system_prompt are required."}], "is_error": True}
+    path = create_subagent(name, description, system_prompt, tools)
+    return {"content": [{"type": "text", "text": f"Sub-agent '{name}' created at {path}"}]}
+
+
+@sdk.tool(
+    name="subagent_run",
+    description=(
+        "Run a named sub-agent with a specific task. The sub-agent executes in its own workspace "
+        "with its own system prompt and returns its result. Use this to delegate focused work: "
+        "research, data transformation, drafting, analysis."
+    ),
+    input_schema={"name": str, "task": str},
+)
+async def tool_subagent_run(args: dict) -> dict:
+    name = args.get("name", "").strip()
+    task = args.get("task", "").strip()
+    if not name or not task:
+        return {"content": [{"type": "text", "text": "name and task are required."}], "is_error": True}
+    try:
+        result = await run_subagent(name, task)
+        return {"content": [{"type": "text", "text": result}]}
+    except ValueError as e:
+        return {"content": [{"type": "text", "text": str(e)}], "is_error": True}
+    except Exception as e:
+        return {"content": [{"type": "text", "text": f"Sub-agent error: {e}"}], "is_error": True}
+
+
+# ── MCP server bundling all tools ─────────────────────────────────────────────
 _memory_mcp = sdk.create_sdk_mcp_server(
     name="memory",
-    tools=[tool_memory_search, tool_memory_write_long_term, tool_memory_write_daily, tool_memory_read_file],
+    tools=[
+        tool_memory_search, tool_memory_write_long_term, tool_memory_write_daily, tool_memory_read_file,
+        tool_connector_list, tool_connector_add, tool_connector_remove, tool_connector_info,
+        tool_skill_list, tool_skill_read, tool_skill_write, tool_skill_delete,
+        tool_subagent_list, tool_subagent_create, tool_subagent_run,
+    ],
 )
 
 
@@ -205,6 +443,11 @@ def build_system_prompt() -> str:
             parts.append(f"## Daily Notes ({label}, {d.isoformat()})\n\n" + daily.read_text().strip())
 
     parts.append(load_instructions(AGENT_DIR).read_text().strip())
+
+    skills_text = _skills_mod.load_all()
+    if skills_text:
+        parts.append("## Skills\n\n" + skills_text)
+
     return "\n\n---\n\n".join(parts)
 
 
@@ -273,6 +516,24 @@ def is_allowed(update: Update) -> bool:
 
 
 # ── Markdown → Telegram HTML ──────────────────────────────────────────────────
+
+def _format_table(rows: list[list[str]]) -> str:
+    """Render a list of cell-rows as a fixed-width monospace table."""
+    if not rows:
+        return ""
+    col_count = max(len(r) for r in rows)
+    # Normalise all rows to the same column count
+    rows = [r + [""] * (col_count - len(r)) for r in rows]
+    col_widths = [max(len(r[c]) for r in rows) for c in range(col_count)]
+    sep = "  ".join("─" * w for w in col_widths)
+    lines = []
+    for idx, row in enumerate(rows):
+        lines.append("  ".join(cell.ljust(col_widths[c]) for c, cell in enumerate(row)).rstrip())
+        if idx == 0:
+            lines.append(sep)
+    return "\n".join(lines)
+
+
 def md_to_html(text: str) -> str:
     result = []
     lines = text.split("\n")
@@ -296,13 +557,12 @@ def md_to_html(text: str) -> str:
             continue
 
         if "|" in line and i + 1 < len(lines) and re.match(r"^\s*\|[-| :]+\|\s*$", lines[i + 1]):
-            table_lines = []
+            rows: list[list[str]] = []
             while i < len(lines) and "|" in lines[i]:
                 if not re.match(r"^\s*\|[-| :]+\|\s*$", lines[i]):
-                    cells = [c.strip() for c in lines[i].strip().strip("|").split("|")]
-                    table_lines.append("  ".join(cells))
+                    rows.append([c.strip() for c in lines[i].strip().strip("|").split("|")])
                 i += 1
-            result.append("<pre>" + html.escape("\n".join(table_lines)) + "</pre>")
+            result.append("<pre>" + html.escape(_format_table(rows)) + "</pre>")
             continue
 
         m = re.match(r"^(#{1,3})\s+(.*)", line)
@@ -382,12 +642,7 @@ async def run_claude(prompt: str, chat_id: int, silent: bool = False) -> str:
         permission_mode="bypassPermissions",
         setting_sources=["user"],
         mcp_servers={"memory": _memory_mcp},
-        allowed_tools=[
-            "Bash", "Read", "Write", "Edit", "Glob", "Grep",
-            "WebSearch", "WebFetch", "TodoWrite",
-            "memory_search", "memory_write_long_term",
-            "memory_write_daily", "memory_read_file",
-        ],
+        allowed_tools=_build_allowed_tools(),
     )
 
     reply_parts: list[str] = []
@@ -440,6 +695,35 @@ async def maybe_flush(chat_id: int) -> None:
         logger.info("Flush produced output: %s...", reply[:60])
 
 
+# ── MCP readiness probe ────────────────────────────────────────────────────────
+
+async def _probe_mcp() -> None:
+    """
+    Run a silent one-turn query to force the SDK to initialize all MCP server
+    connections. Sets _mcp_ready_event when done (or on error) so handle_message
+    can proceed.
+    """
+    global _mcp_ready_event
+    logger.info("MCP probe: initialising connections...")
+    try:
+        options = sdk.ClaudeAgentOptions(
+            cwd=str(WORKSPACE),
+            permission_mode="bypassPermissions",
+            setting_sources=["user"],
+            mcp_servers={"memory": _memory_mcp},
+            allowed_tools=_build_allowed_tools(),
+        )
+        async for event in sdk.query(prompt="Reply with the single word READY.", options=options):
+            if isinstance(event, sdk.ResultMessage):
+                break
+        logger.info("MCP probe: all connections ready")
+    except Exception as e:
+        logger.warning("MCP probe failed (non-fatal): %s", e)
+    finally:
+        if _mcp_ready_event:
+            _mcp_ready_event.set()
+
+
 # ── Handlers ───────────────────────────────────────────────────────────────────
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not is_allowed(update):
@@ -470,11 +754,71 @@ async def cmd_reset(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text("Session reset. Next message starts a fresh conversation.")
 
 
+def _do_restart() -> None:
+    """Restart this process. Prefers systemd; falls back to os.execv."""
+    if shutil.which("systemctl"):
+        try:
+            subprocess.Popen(
+                ["systemctl", "--user", "restart", "claude-main.service"],
+                start_new_session=True,
+            )
+            return
+        except Exception:
+            pass
+    os.execv(sys.executable, [sys.executable] + sys.argv)
+
+
+async def cmd_restart(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not is_allowed(update):
+        return
+    await update.message.reply_text("Restarting...")
+    await asyncio.sleep(0.5)
+    _do_restart()
+
+
+async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not is_allowed(update):
+        return
+    uptime_secs = int(time.time() - _start_time)
+    hours, rem = divmod(uptime_secs, 3600)
+    minutes, seconds = divmod(rem, 60)
+
+    with sqlite3.connect(DB_PATH) as con:
+        session_count = con.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]
+
+    memory_md = WORKSPACE / "MEMORY.md"
+    memory_size = memory_md.stat().st_size if memory_md.exists() else 0
+    today_note = WORKSPACE / "memory" / f"{date.today().isoformat()}.md"
+    today_size = today_note.stat().st_size if today_note.exists() else 0
+
+    await update.message.reply_text(
+        f"<b>Main status</b>\n"
+        f"Uptime: {hours}h {minutes}m {seconds}s\n"
+        f"Active sessions: {session_count}\n"
+        f"MEMORY.md: {memory_size:,} bytes\n"
+        f"Today's notes: {today_size:,} bytes",
+        parse_mode=ParseMode.HTML,
+    )
+
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message or not update.message.text:
         return
     if not is_allowed(update):
         return
+
+    # Wait for MCP connections to initialise after startup/restart
+    if _mcp_ready_event and not _mcp_ready_event.is_set():
+        await context.bot.send_chat_action(
+            chat_id=update.effective_chat.id, action=ChatAction.TYPING
+        )
+        try:
+            await asyncio.wait_for(
+                asyncio.shield(_mcp_ready_event.wait()), timeout=_MCP_PROBE_TIMEOUT
+            )
+        except asyncio.TimeoutError:
+            logger.warning("MCP probe timed out — proceeding without guarantee")
+            _mcp_ready_event.set()
 
     chat_id = update.effective_chat.id
     user_text = update.message.text
@@ -501,6 +845,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             await update.message.reply_text(chunk, parse_mode=ParseMode.HTML)
         except Exception:
             await update.message.reply_text(chunk)
+
+    if _restart_requested:
+        await asyncio.sleep(1)
+        _do_restart()
 
 
 async def _keep_typing(context: ContextTypes.DEFAULT_TYPE, chat_id: int) -> None:
@@ -542,10 +890,38 @@ def main() -> None:
     logger.info("Allowed user IDs: %s", ALLOWED_USER_IDS)
     logger.info("Memory index ready — watcher running")
 
-    app = Application.builder().token(BOT_TOKEN).build()
+    async def _post_init(app: Application) -> None:
+        global _mcp_ready_event
+        _mcp_ready_event = asyncio.Event()
+
+        installed = get_installed_connectors()
+        if installed:
+            connector_str = "Connectors: " + ", ".join(installed)
+            notice = f"Main is online. {connector_str} — loading..."
+        else:
+            notice = "Main is online."
+            _mcp_ready_event.set()  # no connectors to probe
+
+        for uid in ALLOWED_USER_IDS:
+            try:
+                await app.bot.send_message(uid, notice)
+            except Exception as e:
+                logger.warning("Startup notification failed for %d: %s", uid, e)
+
+        if installed:
+            asyncio.create_task(_probe_mcp())
+
+    app = (
+        Application.builder()
+        .token(BOT_TOKEN)
+        .post_init(_post_init)
+        .build()
+    )
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("whoami", cmd_whoami))
     app.add_handler(CommandHandler("reset", cmd_reset))
+    app.add_handler(CommandHandler("status", cmd_status))
+    app.add_handler(CommandHandler("restart", cmd_restart))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_error_handler(error_handler)
 

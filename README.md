@@ -1,14 +1,39 @@
-# claude-command-center
+# claudhaus
 
-A personal AI command center built on the Claude Agent SDK. One Telegram bot, one full-power agent, no coordination overhead. Send a message from your phone; get a senior software engineer on the other end with persistent memory, all your tools, and your MCP connectors.
+> A personal AI command center built on the Claude Agent SDK.  
+> The vibe-coded, self-hosted alternative to OpenClaw — built for one person, not a team.
+
+Send a message from your phone. Get your own AI agent on the other end — shaped to your role, connected to your tools, and getting smarter every conversation.
+
+---
+
+## vs OpenClaw
+
+[OpenClaw](https://docs.openclaw.ai) is a multi-provider AI gateway: install it, configure channels and providers via config files, get a dashboard. It's designed to be a general-purpose router between messaging platforms and AI models.
+
+**Claudhaus takes the same idea and rebuilds it from scratch on the Claude Agent SDK:**
+
+| | OpenClaw | Claudhaus |
+|---|---|---|
+| Model | Multi-provider (Anthropic, OpenAI, Google…) | Claude-native, Claude Agent SDK |
+| Setup | Config files + dashboard | One Python file, chat-driven |
+| Memory | None built-in | BM25 search over Markdown files, daily notes, long-term MEMORY.md |
+| Integrations | Config-file plugins | Self-installing MCP connectors — just ask the bot |
+| Skills | Static plugins | Teachable via chat, hot-loaded, no restart |
+| Sub-agents | Not built-in | Spawnable via chat with own workspaces and tool sets |
+| Self-improvement | No | Main edits its own source code, syntax-checks, restarts |
+| Target | Teams, multi-user | One person, personal ops |
+| Philosophy | Gateway and router | A person, not a pipeline |
+
+Claudhaus is what you build when you want one Claude agent that knows you, learns your workflows, connects to your tools, and gets smarter every day — not a dashboard you configure.
 
 ---
 
 ## What this is
 
-A single Claude-powered agent ("Main") connected to Telegram. Main handles engineering, DevOps, research, project management, and personal ops — whatever you throw at it. It has access to Bash, file tools, web search, and any MCP servers you've configured via `claude mcp`. Memory persists across sessions via plain Markdown files you can read and edit directly.
+A single Claude-powered agent ("Main") connected to Telegram. Main handles engineering, DevOps, research, project management, personal ops, CRM work, and anything else you throw at it. It has access to Bash, file tools, web search, and any MCP servers you connect. Memory persists across sessions via plain Markdown files you can read and edit directly.
 
-There are no sub-agents, no delegation layers, and no task queues built in. If you want Main to spawn sub-agents for specialized work, you tell Main that directly — the Claude Agent SDK's `Task` tool supports it.
+Everything new — connectors, skills, sub-agents — is added by chatting with Main. No config files. No restarts for most things. No code changes required.
 
 ---
 
@@ -16,7 +41,7 @@ There are no sub-agents, no delegation layers, and no task queues built in. If y
 
 - **Claude Code subscription** with an active `claude` CLI login (`claude --version` should work)
 - **Python 3.10+**
-- **Node.js 18+** (required by the `claude` CLI)
+- **Node.js 18+** (required by the `claude` CLI and MCP servers)
 - **git**
 - A Telegram account
 
@@ -27,48 +52,50 @@ There are no sub-agents, no delegation layers, and no task queues built in. If y
 ## Quick start
 
 ```bash
-git clone https://github.com/your-username/claude-command-center.git
-cd claude-command-center
+git clone https://github.com/your-username/claudhaus.git
+cd claudhaus
 python3 scripts/setup.py
 ```
 
 The setup wizard will:
 1. Check prerequisites
 2. Create `.env` from `.env.example`
-3. Prompt for your Telegram bot token (if not already set)
-4. Create runtime directories
-5. Copy soul file templates to editable `.md` files
-6. Optionally create a personal `CLAUDE.personal.md` override
-7. Create and populate a Python venv
-8. Initialize the SQLite database
+3. Prompt for your Telegram bot token
+4. Create runtime directories and copy soul file templates
+5. Create and populate a Python venv
+6. Initialize the SQLite database
+7. Optionally install and enable systemd user units (Linux/WSL2)
 
 Then:
 
 ```bash
 source .venv/bin/activate
 # Fill in agents/shared/USER_PROFILE.md with your context
-# Fill in .env: TELEGRAM_ALLOWED_USER_IDS (get your ID from /whoami after first run)
+# Fill in .env: TELEGRAM_ALLOWED_USER_IDS (get your ID via /whoami after first run)
 python agents/main/agent.py
 ```
+
+Or if you installed the systemd units: `systemctl --user start claude-main.service`
 
 ---
 
 ## Architecture
 
-**One agent. Full power.**
-
-Main is a senior software engineer and general-purpose operator. It has no peers, no managers, no sub-agents built in. Its breadth comes from its tool set; its depth comes from session continuity and the memory system.
-
 ```
 Telegram message
       ↓
-agents/main/agent.py   ← Python bot runner
+agents/main/agent.py        ← async Python bot runner
       ↓
-Claude Agent SDK       ← spawns claude CLI subprocess
+Claude Agent SDK            ← spawns claude CLI subprocess per turn
       ↓
-Main                   ← CLAUDE.md instructions + soul layer + memory
+Main (claude)               ← soul files + MEMORY.md + daily notes + CLAUDE.md + skills
       ↓
-Tools: Bash, Read, Write, Edit, Glob, Grep, WebSearch, WebFetch, MCP connectors
+Tools: Bash, Read, Write, Edit, Glob, Grep, WebSearch, WebFetch
+     + Memory tools: search, write long-term, write daily
+     + Connector tools: list, add, remove (self-installing MCP)
+     + Skill tools: list, read, write, delete (hot-loaded, no restart)
+     + Sub-agent tools: list, create, run (own workspace + tool set)
+     + Any MCP servers configured via `claude mcp add`
 ```
 
 ### Dual instruction set
@@ -77,45 +104,122 @@ Every instruction file exists in two forms:
 
 | File | Committed | Purpose |
 |------|-----------|---------|
-| `agents/main/CLAUDE.md` | Yes | Generic template. Works for any user out of the box. |
-| `agents/main/CLAUDE.personal.md` | No (gitignored) | Your real context, preferences, business specifics. |
+| `agents/main/CLAUDE.md` | Yes | Generic template — works for any user out of the box |
+| `agents/main/CLAUDE.personal.md` | No (gitignored) | Your real context, preferences, business specifics |
 
-At startup, if `CLAUDE.personal.md` exists it's used; otherwise `CLAUDE.md`. One decision point, always logged so you know which is active.
-
-The same pattern applies to soul files in `agents/shared/`.
+At startup, if `CLAUDE.personal.md` exists it's used; otherwise `CLAUDE.md`. The same pattern applies to soul files in `agents/shared/`.
 
 ---
 
-## Memory system (Phase 4)
+## Make it yours
 
-All memory is plain Markdown on disk. Main only "remembers" what gets written to a file. Open `workspaces/main/MEMORY.md` in any editor and see exactly what Main knows.
+Claudhaus ships with a generic agent called "Main." The setup wizard creates your personal version:
+
+```bash
+python3 scripts/setup.py
+```
+
+It asks for your agent's **name**, **role**, and **tone**, then generates `agents/main/CLAUDE.personal.md` — gitignored, never committed. Examples:
+
+| Name | Role |
+|------|------|
+| Scout | Sales ops specialist — HubSpot, outreach, pipeline reporting |
+| Sage | Research analyst — finds, summarises, synthesises |
+| Dev | Senior engineer — writes, reviews, and debugs code |
+| Aria | Personal knowledge manager and general operator |
+
+Fill in `agents/shared/USER_PROFILE.md`, `BUSINESS_CONTEXT.md`, and `HOUSE_RULES.md` to give your agent personal context — who you are, what you're building, and how you want it to behave.
+
+See **[docs/customizing-your-agent.md](docs/customizing-your-agent.md)** for the full guide including example personas.
+
+---
+
+## Memory
+
+All memory is plain Markdown on disk — readable and editable in any text editor.
 
 - **`MEMORY.md`** — long-term durable facts, preferences, decisions
 - **`memory/YYYY-MM-DD.md`** — daily running context, auto-loaded for today and yesterday
-- **`DREAMS.md`** — nightly consolidation candidates, human-reviewed before promotion
-- **Hybrid search** — BM25 + vector embeddings, merged via RRF
+- **`DREAMS.md`** — nightly consolidation candidates (human-reviewed before promotion to MEMORY.md)
+- **Search** — BM25 keyword search across all memory files, live-updated via file watcher
+
+---
+
+## Connectors
+
+Add integrations by chatting with Main — no terminal commands needed.
+
+> *"Add the GitHub connector"*
+
+Main walks you through credentials, runs `claude mcp add`, writes the token to `.env`, and restarts itself. Supported out of the box:
+
+GitHub · HubSpot · Slack · Linear · Notion · Google Drive · Gmail · Google Calendar · PostgreSQL · SQLite · Stripe · Jira
+
+Add any other MCP server manually:
+```bash
+claude mcp add <name> -s user -- <command>
+```
+
+See `docs/connectors.md` for full setup instructions.
+
+---
+
+## Skills
+
+Skills are Markdown files injected into the system prompt on every turn — no restart required.
+
+> *"Remember that when I ask for HubSpot contacts, always format them as a table with Name, Title, Company, Email, Phone"*
+
+Main creates a skill file and applies that behaviour from then on. Skills are personal and gitignored.
+
+---
+
+## Sub-agents
+
+Main can create and run specialist agents on demand. Each has its own workspace, system prompt, and restricted tool set.
+
+> *"Create a researcher sub-agent with only WebSearch and WebFetch"*  
+> *"Use the researcher to find the top 5 ERP vendors targeting APAC financial services"*
+
+Main delegates the task, the sub-agent runs in its own workspace, and Main formats the result for you. Sub-agent definitions are personal and gitignored.
+
+---
+
+## Self-improvement
+
+Main can read and edit its own source code.
+
+> *"Add a /history command that shows my last 10 messages"*
+
+Main reads the relevant files, makes the change, runs a syntax check (`python -m py_compile`), and restarts itself. For skills and sub-agents, no restart is needed — they load on the next turn.
+
+---
+
+## Telegram commands
+
+| Command | Description |
+|---------|-------------|
+| `/start` | Confirm the bot is online |
+| `/whoami` | Show your Telegram user and chat IDs |
+| `/reset` | Clear session and start fresh |
+| `/status` | Uptime, session count, memory sizes |
+| `/restart` | Restart the bot process |
 
 ---
 
 ## Configuration reference
 
-All variables in `.env`:
-
-| Variable | Type | Default | Description |
-|----------|------|---------|-------------|
-| `TELEGRAM_BOT_TOKEN_MAIN` | string | — | Main bot token from BotFather |
-| `TELEGRAM_ALLOWED_USER_IDS` | csv | — | Telegram user IDs allowed to DM Main |
-| `TELEGRAM_ALLOWED_CHAT_IDS` | csv | — | Group/channel IDs Main is active in |
-| `MEMORY_EMBEDDING_PROVIDER` | enum | `local` | `local` \| `openai` \| `none` |
-| `MEMORY_EMBEDDING_MODEL` | string | `all-MiniLM-L6-v2` | Model name for local embeddings |
-| `MEMORY_SESSION_INDEXING` | bool | `false` | Index raw session logs for search |
-| `MEMORY_SESSION_DELTA_BYTES` | int | `100000` | Bytes threshold for session index update |
-| `MEMORY_SESSION_DELTA_MESSAGES` | int | `50` | Message count threshold |
-| `DREAMING_ENABLED` | bool | `false` | Enable nightly memory consolidation |
-| `DREAMING_LOOKBACK_DAYS` | int | `30` | Days of daily notes to consider |
-| `DREAMING_PROMOTION_THRESHOLD` | float | `0.6` | Score threshold for DREAMS.md candidates |
-| `OBSIDIAN_VAULT_PATH` | path | — | Absolute path to your Obsidian vault |
-| `DASHBOARD_PORT` | int | `8000` | Dashboard listen port |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `TELEGRAM_BOT_TOKEN_MAIN` | — | Main bot token from BotFather |
+| `TELEGRAM_ALLOWED_USER_IDS` | — | Comma-separated Telegram user IDs |
+| `TELEGRAM_ALLOWED_CHAT_IDS` | — | Group/channel IDs (DMs only if empty) |
+| `MAIN_EXTRA_TOOLS` | `*` | `*` = all tools; comma-list to restrict |
+| `DREAMING_ENABLED` | `false` | Nightly memory consolidation sweep |
+| `DREAMING_LOOKBACK_DAYS` | `30` | Days of notes to sweep |
+| `DREAMING_PROMOTION_THRESHOLD` | `0.6` | Score threshold for DREAMS.md candidates |
+| `DASHBOARD_PORT` | `8000` | Dashboard listen port (Phase 3, not yet built) |
+| `OBSIDIAN_VAULT_PATH` | — | Absolute path to Obsidian vault (Phase 5, not yet built) |
 
 ---
 
@@ -123,53 +227,83 @@ All variables in `.env`:
 
 ### WSL2
 
-Requires `systemd=true` in `/etc/wsl.conf` and `vmIdleTimeout=-1` in `~/.wslconfig` to prevent shutdown during idle. See `docs/wsl-keepalive.md`.
+Requires `systemd=true` in `/etc/wsl.conf` and `vmIdleTimeout=-1` in `~/.wslconfig` to prevent idle shutdown. See `docs/wsl-keepalive.md`.
 
-### Native Linux
-
-Works out of the box with systemd. Install service files:
+### Linux — auto-start
 
 ```bash
-cp systemd/claude-main.service ~/.config/systemd/user/
-systemctl --user daemon-reload
-systemctl --user enable --now claude-main.service
+bash scripts/install-systemd.sh
 ```
 
-### macOS
+Copies all unit files, enables linger (survives logout), starts `claude-main.service`, and enables nightly backup and dreaming timers.
 
-Use the launchd plist in `systemd/com.claudecommandcenter.main.plist`:
+### macOS
 
 ```bash
 cp systemd/com.claudecommandcenter.main.plist ~/Library/LaunchAgents/
 launchctl load ~/Library/LaunchAgents/com.claudecommandcenter.main.plist
 ```
 
-### Docker (advanced)
+### Docker
 
 ```bash
 docker compose up -d
 ```
 
-**Critical:** the `~/.claude` volume mount is required for CLI auth. Without it, the bot cannot call Claude. See `docker-compose.yml` for the mount definition.
+**Critical:** the `~/.claude` volume mount is required for CLI auth. See `docker-compose.yml`.
 
 ---
 
 ## FAQ
 
-**Q: Why not set `ANTHROPIC_API_KEY`?**  
+**Q: Why not set `ANTHROPIC_API_KEY`?**
 Setting it switches billing from your Claude Code subscription to metered API calls. Auth via `~/.claude/.credentials.json` is free under your subscription.
 
-**Q: Can Main spawn sub-agents?**  
-Not by default. If you want that, tell Main directly — the Claude Agent SDK's `Task` tool supports it. Nothing needs to be built upfront.
+**Q: How do I find my Telegram user ID?**
+Start the bot and send `/whoami`. It replies with your numeric user ID. Put that in `TELEGRAM_ALLOWED_USER_IDS`.
 
-**Q: How do I find my Telegram user ID?**  
-Run the bot (Phase 1) and send it `/whoami`. It replies with your numeric user ID. Put that in `TELEGRAM_ALLOWED_USER_IDS`.
+**Q: How do I reset a conversation?**
+Send `/reset`. The next message starts a fresh Claude session.
 
-**Q: How do I reset a conversation?**  
-Send `/reset` to the bot. The next message starts a fresh Claude session.
+**Q: What happens when the context window fills up?**
+The memory flush system writes important facts to `MEMORY.md` before compaction. Nothing is lost.
 
-**Q: What happens when the context window fills up?**  
-The memory flush system (Phase 4) writes important facts to disk before compaction occurs. Nothing is lost.
+**Q: Is this safe to use on shared machines?**
+`bypassPermissions` mode gives Main full tool access. Only run this on machines you control, with the Telegram allowlist configured.
 
-**Q: Is this safe to use on shared machines?**  
-The `bypassPermissions` mode (Phase 2) gives Main full tool access. Only run this on machines you control, with the Telegram allowlist set.
+**Q: Can multiple people use one instance?**
+Add their user IDs to `TELEGRAM_ALLOWED_USER_IDS`. Each Telegram chat gets its own Claude session. Memory is currently shared across all users — good for a household, not for a team.
+
+---
+
+## Legal & compliance
+
+**Claudhaus is an independent open-source project. It is not affiliated with, endorsed by, or supported by Anthropic.**
+
+### You must comply with Anthropic's terms
+
+Using Claudhaus requires a valid Claude Code subscription or Anthropic API key. By using this software you agree to:
+
+- [Anthropic Terms of Service](https://www.anthropic.com/legal/consumer-terms)
+- [Anthropic Usage Policy](https://www.anthropic.com/legal/usage-policy)
+- [Claude Agent SDK terms](https://www.anthropic.com/legal/consumer-terms) (same as above — the SDK is part of Claude Code)
+
+You are solely responsible for obtaining and maintaining valid credentials, and for ensuring your use of Claude through this software complies with Anthropic's policies.
+
+### `bypassPermissions` mode
+
+Claudhaus runs the Claude agent with `permission_mode="bypassPermissions"`, which means the agent can execute shell commands, read and write files, and call external APIs without per-action prompts. **Only run Claudhaus on machines you control and trust.** You are responsible for the actions taken by your agent.
+
+### No API keys included
+
+Claudhaus does not include, distribute, or proxy any API keys. You provide your own credentials via `.env`. Keep your `.env` file private — it is gitignored by default.
+
+### Responsible use
+
+Claudhaus gives your agent access to powerful tools including Bash execution, file system access, and external service integrations. Use it responsibly and in accordance with the terms of any third-party services you connect (GitHub, HubSpot, Slack, etc.).
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE).

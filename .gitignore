@@ -19,6 +19,17 @@ workspaces/
 # Personal instruction overrides
 **/CLAUDE.personal.md
 
+# Skills are personal — not committed
+agents/main/skills/
+
+# User-created sub-agents are personal (any agents/ subdir except main/ and shared/)
+# Add specific names as you create them, e.g.:
+# agents/researcher/
+# agents/coder/
+
+# Local Claude Code settings (personal overrides)
+.claude/settings.local.json
+
 # Personal soul files
 agents/shared/USER_PROFILE.md
 agents/shared/BUSINESS_CONTEXT.md
