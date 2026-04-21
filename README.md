@@ -141,7 +141,7 @@ All memory is plain Markdown on disk — readable and editable in any text edito
 
 - **`MEMORY.md`** — long-term durable facts, preferences, decisions
 - **`memory/YYYY-MM-DD.md`** — daily running context, auto-loaded for today and yesterday
-- **`DREAMS.md`** — nightly consolidation candidates (human-reviewed before promotion to MEMORY.md)
+- **`DREAMS.md`** — nightly consolidation candidates (human-reviewed before promotion to MEMORY.md); enable with `DREAMING_ENABLED=true`
 - **Search** — BM25 keyword search across all memory files, live-updated via file watcher
 
 ---
@@ -196,17 +196,21 @@ Main reads the relevant files, makes the change, runs a syntax check (`python -m
 
 ---
 
-## Images and voice
+## Images, voice, and files
 
 Send a photo and Main analyzes it — diagrams, screenshots, documents, anything Claude can read visually.
 
 Send a voice message and Main transcribes it via Whisper and responds as if you typed it.
 
-Configure in `.env`:
+Send any file — code, text, CSV, JSON, PDF — and Main reads it directly into context. Attach a caption to guide what to do with it.
+
+Configure voice transcription in `.env`:
 ```
 WHISPER_PROVIDER=openai   # or: local (faster-whisper, CPU), none (disabled)
 OPENAI_API_KEY=sk-...     # required for openai provider
 ```
+
+For PDF support: `pip install pypdf`
 
 ---
 

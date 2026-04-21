@@ -1,11 +1,11 @@
 [Unit]
-Description=Claude Command Center — Memory dreaming sweep
+Description=claudhaus — Nightly memory dreaming sweep
 
 [Service]
 Type=oneshot
 WorkingDirectory=%h/JjayFiles/claude-command-center
+EnvironmentFile=-%h/JjayFiles/claude-command-center/.env
 ExecStart=%h/JjayFiles/claude-command-center/.venv/bin/python memory/dreaming.py
-Environment=ANTHROPIC_API_KEY=
 
 StandardOutput=append:%h/JjayFiles/claude-command-center/logs/dreaming.log
 StandardError=append:%h/JjayFiles/claude-command-center/logs/dreaming.log

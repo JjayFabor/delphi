@@ -1053,6 +1053,68 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         _do_restart()
 
 
+async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.message or not update.message.document:
+        return
+    if not is_allowed(update):
+        return
+
+    if _mcp_ready_event and not _mcp_ready_event.is_set():
+        await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
+        try:
+            await asyncio.wait_for(asyncio.shield(_mcp_ready_event.wait()), timeout=_MCP_PROBE_TIMEOUT)
+        except asyncio.TimeoutError:
+            _mcp_ready_event.set()
+
+    chat_id = update.effective_chat.id
+    doc = update.message.document
+    filename = doc.file_name or f"file_{doc.file_id[:12]}"
+    caption = update.message.caption or ""
+
+    await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
+    media_dir = WORKSPACE / "media"
+    saved_path = await _media_mod.save_document(context.bot, doc.file_id, filename, media_dir)
+
+    file_text, is_extractable = _media_mod.extract_text(saved_path)
+
+    if is_extractable:
+        prompt = (
+            f"The user sent a file: {filename}\n"
+            f"Saved at: {saved_path}\n"
+            f"Contents:\n\n{file_text}"
+            + (f"\n\nTheir note: {caption}" if caption else "")
+        )
+    else:
+        prompt = (
+            f"The user sent a file: {filename}\n"
+            f"Saved at: {saved_path}\n"
+            f"Note: {file_text}"
+            + (f"\nTheir note: {caption}" if caption else "")
+        )
+
+    db_log(chat_id, "user", f"[document: {filename}]{f' — {caption}' if caption else ''}")
+    _flush_mgr.record(chat_id, prompt)
+
+    typing_task = asyncio.create_task(_keep_typing(context, chat_id))
+    try:
+        reply = await run_claude(prompt, chat_id)
+    finally:
+        typing_task.cancel()
+
+    db_log(chat_id, "assistant", reply)
+    _flush_mgr.record(chat_id, reply)
+    formatted = md_to_html(reply)
+    for chunk in chunk_text(formatted):
+        try:
+            await update.message.reply_text(chunk, parse_mode=ParseMode.HTML)
+        except Exception:
+            await update.message.reply_text(chunk)
+
+    if _restart_requested:
+        await asyncio.sleep(1)
+        _do_restart()
+
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message or not update.message.text:
         return
@@ -1195,6 +1257,7 @@ def main() -> None:
     app.add_handler(CommandHandler("restart", cmd_restart))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, handle_voice))
+    app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_error_handler(error_handler)
 

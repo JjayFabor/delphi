@@ -16,11 +16,13 @@ watchdog>=4.0,<5
 # sentence-transformers>=3.0,<4
 # sqlite-vec
 
-# ── Media & voice (Phase 8) ───────────────────────────────────────────────────
+# ── Media, voice & documents (Phase 8/9) ──────────────────────────────────────
 # Voice transcription via OpenAI Whisper API (requires OPENAI_API_KEY):
 openai>=1.0,<2
 # OR local Whisper (CPU, no API key, ~500 MB model download on first run):
 # faster-whisper>=1.0,<2
+# PDF text extraction (optional — install to enable PDF uploads):
+# pypdf>=4.0,<5
 
 # ── Discord channel (Phase 8) ─────────────────────────────────────────────────
 discord.py>=2.3,<3

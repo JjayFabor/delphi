@@ -4,6 +4,18 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.9.0] — Dreaming & Document Upload — 2026-04-21
+
+### Added
+- **Document upload** — send any file to the bot; text/code/data files are read directly into Claude's context; PDFs have text extracted (requires `pip install pypdf`); other types are saved and referenced by path
+- `agents/main/media.py` — added `save_document()` and `extract_text()` with support for 25+ text formats and optional PDF extraction via pypdf
+- `handle_document()` handler in agent.py — registered for all file types
+
+### Changed
+- **Dreaming deduplication** — `memory/dreaming.py` no longer adds lines already present in DREAMS.md; each nightly sweep only writes genuinely new candidates
+- **Dreaming notification** — sweep writes a summary line to today's daily note so the bot surfaces it naturally on the next session
+- **Dreaming service** — `systemd/claude-memory-dreaming.service` now uses `EnvironmentFile` to load `.env`; removed the incorrect `ANTHROPIC_API_KEY=` override
+
 ## [0.8.0] — Media, Scheduled Tasks & Discord — 2026-04-21
 
 ### Added
