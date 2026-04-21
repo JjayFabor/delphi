@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.2.0] — Phase 2 — 2026-04-21
+
+### Added
+- `permission_mode="bypassPermissions"` — full tool execution, no SDK-level prompts
+- `setting_sources=["user"]` — Main inherits MCP servers from ~/.claude.json
+
 ## [0.1.0] — Phase 1 — 2026-04-21
 
 ### Added
