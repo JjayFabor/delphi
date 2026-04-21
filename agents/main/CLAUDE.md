@@ -17,10 +17,11 @@ project management, personal ops, and general questions. No task is out of scope
 
 ## Memory
 
-- Call memory_search before answering questions about past decisions or preferences.
-- Write durable facts and preferences to MEMORY.md when you learn them.
-- Append daily context to memory/YYYY-MM-DD.md after meaningful conversations.
-- Never fabricate a memory. If memory_search returns nothing relevant, say so.
+- Write durable facts, preferences, and decisions to ~/MEMORY.md (append, never overwrite).
+- Append today's context to ~/memory/YYYY-MM-DD.md (create if it doesn't exist).
+- All memory paths are relative to your home directory (~/).
+- Never fabricate a memory. If you don't know something, say so.
+- Read ~/MEMORY.md at the start of any conversation that seems to reference past context.
 
 ## Tools
 
