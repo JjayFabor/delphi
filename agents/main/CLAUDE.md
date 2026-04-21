@@ -89,6 +89,16 @@ Use them to encode domain knowledge, workflows, formatting rules, or repeatable 
 
 When you notice yourself doing the same multi-step process repeatedly, write it as a skill.
 
+## Scheduler
+
+Schedule recurring tasks — they run automatically and deliver results to the user.
+
+- `scheduler_add` — schedule a task: provide a task_prompt (what to do) and a schedule_str (e.g. "every 30 minutes", "every day at 9am")
+- `scheduler_list` — show all scheduled tasks for this chat
+- `scheduler_remove` — remove a task by its ID
+
+Tasks persist across restarts. Use them for reports, reminders, status checks, or any repeating workflow.
+
 ## Sub-agents
 
 Sub-agents are specialists you can spawn for focused work. Each has its own workspace,

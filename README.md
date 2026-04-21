@@ -82,9 +82,9 @@ Or if you installed the systemd units: `systemctl --user start claude-main.servi
 ## Architecture
 
 ```
-Telegram message
-      ↓
-agents/main/agent.py        ← async Python bot runner
+Telegram/Discord message (text, photo, or voice)
+      ↓ photo → saved to workspace/media/; voice → Whisper transcript
+agents/main/agent.py        ← async bot runner (Telegram + Discord)
       ↓
 Claude Agent SDK            ← spawns claude CLI subprocess per turn
       ↓
@@ -95,6 +95,7 @@ Tools: Bash, Read, Write, Edit, Glob, Grep, WebSearch, WebFetch
      + Connector tools: list, add, remove (self-installing MCP)
      + Skill tools: list, read, write, delete (hot-loaded, no restart)
      + Sub-agent tools: list, create, run (own workspace + tool set)
+     + Scheduler tools: add, list, remove (recurring tasks, SQLite-backed)
      + Any MCP servers configured via `claude mcp add`
 ```
 
@@ -195,6 +196,37 @@ Main reads the relevant files, makes the change, runs a syntax check (`python -m
 
 ---
 
+## Images and voice
+
+Send a photo and Main analyzes it — diagrams, screenshots, documents, anything Claude can read visually.
+
+Send a voice message and Main transcribes it via Whisper and responds as if you typed it.
+
+Configure in `.env`:
+```
+WHISPER_PROVIDER=openai   # or: local (faster-whisper, CPU), none (disabled)
+OPENAI_API_KEY=sk-...     # required for openai provider
+```
+
+---
+
+## Scheduled tasks
+
+Ask Main to run any task on a recurring schedule. Tasks persist in SQLite and resume on restart.
+
+> *"Every morning at 8am, pull my HubSpot pipeline and send me a summary"*  
+> *"Every 30 minutes, check if the staging server is responding"*
+
+Manage via chat: *"list my scheduled tasks"* / *"remove task #3"*
+
+---
+
+## Discord
+
+Set `DISCORD_BOT_TOKEN` in `.env` and Main appears in Discord too — same memory, same tools, same sessions. DM the bot directly, or @-mention it in a server channel.
+
+---
+
 ## Telegram commands
 
 | Command | Description |
@@ -215,11 +247,16 @@ Main reads the relevant files, makes the change, runs a syntax check (`python -m
 | `TELEGRAM_ALLOWED_USER_IDS` | — | Comma-separated Telegram user IDs |
 | `TELEGRAM_ALLOWED_CHAT_IDS` | — | Group/channel IDs (DMs only if empty) |
 | `MAIN_EXTRA_TOOLS` | `*` | `*` = all tools; comma-list to restrict |
+| `WHISPER_PROVIDER` | `none` | Voice transcription: `openai`, `local`, or `none` |
+| `OPENAI_API_KEY` | — | Required when `WHISPER_PROVIDER=openai` |
+| `DISCORD_BOT_TOKEN` | — | Discord bot token (leave blank to disable) |
+| `DISCORD_ALLOWED_USER_IDS` | — | Comma-separated Discord user IDs (empty = allow all) |
+| `DISCORD_ALLOWED_GUILD_IDS` | — | Comma-separated server IDs (empty = allow all) |
 | `DREAMING_ENABLED` | `false` | Nightly memory consolidation sweep |
 | `DREAMING_LOOKBACK_DAYS` | `30` | Days of notes to sweep |
 | `DREAMING_PROMOTION_THRESHOLD` | `0.6` | Score threshold for DREAMS.md candidates |
-| `DASHBOARD_PORT` | `8000` | Dashboard listen port (Phase 3, not yet built) |
-| `OBSIDIAN_VAULT_PATH` | — | Absolute path to Obsidian vault (Phase 5, not yet built) |
+| `DASHBOARD_PORT` | `8000` | Dashboard listen port (not yet built) |
+| `OBSIDIAN_VAULT_PATH` | — | Absolute path to Obsidian vault (not yet built) |
 
 ---
 

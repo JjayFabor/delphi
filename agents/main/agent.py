@@ -5,6 +5,7 @@ One Telegram bot, one Claude agent, full session persistence + memory.
 """
 
 import asyncio
+import contextvars
 import html
 import logging
 import os
@@ -14,7 +15,7 @@ import sqlite3
 import subprocess
 import sys
 import time
-from datetime import date
+from datetime import date, time as dtime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Optional
@@ -23,6 +24,8 @@ _start_time = time.time()
 _restart_requested = False
 _mcp_ready_event: Optional[asyncio.Event] = None
 _MCP_PROBE_TIMEOUT = 60  # seconds to wait for MCP init before giving up
+_current_chat_id: contextvars.ContextVar[int] = contextvars.ContextVar("current_chat_id", default=0)
+_app: Optional["Application"] = None  # set after Application.build(); used by scheduler tools
 
 from dotenv import load_dotenv
 from telegram import Update
@@ -50,7 +53,14 @@ from agents.main.connectors import (
     REGISTRY as CONNECTOR_REGISTRY,
 )
 from agents.main import skills as _skills_mod
+from agents.main import media as _media_mod
+from agents.main import discord_bot as _discord_mod
 from agents.main.subagents import list_subagents, create_subagent, run_subagent
+from agents.main.scheduler import (
+    init_scheduler_table,
+    db_add_task, db_remove_task, db_list_tasks, db_all_enabled_tasks,
+    parse_schedule,
+)
 
 # ── Logging ────────────────────────────────────────────────────────────────────
 LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -89,6 +99,7 @@ _BASE_TOOLS = [
     "connector_list", "connector_add", "connector_remove", "connector_info",
     "skill_list", "skill_read", "skill_write", "skill_delete",
     "subagent_list", "subagent_create", "subagent_run",
+    "scheduler_add", "scheduler_list", "scheduler_remove",
 ]
 
 def _build_allowed_tools() -> Optional[list[str]]:
@@ -383,6 +394,83 @@ async def tool_subagent_run(args: dict) -> dict:
         return {"content": [{"type": "text", "text": f"Sub-agent error: {e}"}], "is_error": True}
 
 
+# ── Scheduler tools ───────────────────────────────────────────────────────────
+
+@sdk.tool(
+    name="scheduler_add",
+    description=(
+        "Schedule a recurring task. The bot will automatically run the task_prompt "
+        "at the specified interval and send the result to the user. "
+        "schedule_str examples: 'every 30 minutes', 'every 2 hours', "
+        "'every day at 9am', 'daily at 14:30'."
+    ),
+    input_schema={"task_prompt": str, "schedule_str": str},
+)
+async def tool_scheduler_add(args: dict) -> dict:
+    task_prompt = args.get("task_prompt", "").strip()
+    schedule_str = args.get("schedule_str", "").strip()
+    if not task_prompt or not schedule_str:
+        return {"content": [{"type": "text", "text": "task_prompt and schedule_str are required."}], "is_error": True}
+
+    chat_id = _current_chat_id.get()
+    if not chat_id:
+        return {"content": [{"type": "text", "text": "Cannot determine chat context."}], "is_error": True}
+
+    try:
+        task_id = db_add_task(DB_PATH, chat_id, task_prompt, schedule_str)
+    except ValueError as e:
+        return {"content": [{"type": "text", "text": str(e)}], "is_error": True}
+
+    # Register with the running JobQueue immediately
+    if _app and _app.job_queue:
+        _register_one_task(_app, {
+            "id": task_id, "chat_id": chat_id,
+            "task_prompt": task_prompt,
+            **_task_schedule_fields(schedule_str),
+        })
+
+    return {"content": [{"type": "text", "text": f"Scheduled task #{task_id} created: {schedule_str}"}]}
+
+
+@sdk.tool(
+    name="scheduler_list",
+    description="List all scheduled tasks for the current chat.",
+    input_schema={},
+)
+async def tool_scheduler_list(_args: dict) -> dict:
+    chat_id = _current_chat_id.get()
+    if not chat_id:
+        return {"content": [{"type": "text", "text": "Cannot determine chat context."}], "is_error": True}
+    tasks = db_list_tasks(DB_PATH, chat_id)
+    if not tasks:
+        return {"content": [{"type": "text", "text": "No scheduled tasks."}]}
+    lines = [f"#{t['id']} [{'+' if t['enabled'] else '-'}] {t['schedule_str']}: {t['task_prompt']}" for t in tasks]
+    return {"content": [{"type": "text", "text": "\n".join(lines)}]}
+
+
+@sdk.tool(
+    name="scheduler_remove",
+    description="Remove a scheduled task by its ID (shown in scheduler_list).",
+    input_schema={"task_id": int},
+)
+async def tool_scheduler_remove(args: dict) -> dict:
+    task_id = int(args.get("task_id", 0))
+    chat_id = _current_chat_id.get()
+    if not task_id or not chat_id:
+        return {"content": [{"type": "text", "text": "task_id is required."}], "is_error": True}
+
+    deleted = db_remove_task(DB_PATH, task_id, chat_id)
+    if not deleted:
+        return {"content": [{"type": "text", "text": f"Task #{task_id} not found."}], "is_error": True}
+
+    # Remove from running JobQueue
+    if _app and _app.job_queue:
+        for job in _app.job_queue.get_jobs_by_name(f"task_{task_id}"):
+            job.schedule_removal()
+
+    return {"content": [{"type": "text", "text": f"Task #{task_id} removed."}]}
+
+
 # ── MCP server bundling all tools ─────────────────────────────────────────────
 _memory_mcp = sdk.create_sdk_mcp_server(
     name="memory",
@@ -391,8 +479,76 @@ _memory_mcp = sdk.create_sdk_mcp_server(
         tool_connector_list, tool_connector_add, tool_connector_remove, tool_connector_info,
         tool_skill_list, tool_skill_read, tool_skill_write, tool_skill_delete,
         tool_subagent_list, tool_subagent_create, tool_subagent_run,
+        tool_scheduler_add, tool_scheduler_list, tool_scheduler_remove,
     ],
 )
+
+
+# ── Scheduler helpers ─────────────────────────────────────────────────────────
+
+def _task_schedule_fields(schedule_str: str) -> dict:
+    """Parse schedule_str and return {schedule_type, schedule_value}."""
+    parsed = parse_schedule(schedule_str)
+    return {
+        "schedule_type": parsed["type"],
+        "schedule_value": str(parsed.get("seconds") or parsed.get("time", "")),
+    }
+
+
+async def _run_scheduled_task(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """JobQueue callback — runs a scheduled task and delivers the reply."""
+    task: dict = context.job.data
+    chat_id: int = task["chat_id"]
+    task_prompt: str = task["task_prompt"]
+    logger.info("Running scheduled task #%s for chat %d", task["id"], chat_id)
+    reply = await run_claude(f"[Scheduled task] {task_prompt}", chat_id)
+    formatted = md_to_html(reply)
+    for chunk in chunk_text(formatted):
+        try:
+            await context.bot.send_message(chat_id, chunk, parse_mode=ParseMode.HTML)
+        except Exception:
+            try:
+                await context.bot.send_message(chat_id, chunk)
+            except Exception as e:
+                logger.warning("Failed to deliver scheduled task result to %d: %s", chat_id, e)
+
+
+def _register_one_task(app: "Application", task: dict) -> None:
+    """Register a single task row with the JobQueue."""
+    from telegram.ext import JobQueue
+    jq: JobQueue = app.job_queue
+    name = f"task_{task['id']}"
+    stype = task["schedule_type"]
+    svalue = task["schedule_value"]
+    if stype == "interval":
+        jq.run_repeating(
+            _run_scheduled_task,
+            interval=int(svalue),
+            first=int(svalue),
+            data=task,
+            name=name,
+        )
+    elif stype == "daily":
+        h, m = svalue.split(":")
+        jq.run_daily(
+            _run_scheduled_task,
+            time=dtime(int(h), int(m)),
+            data=task,
+            name=name,
+        )
+    logger.info("Registered scheduled task #%s (%s %s)", task["id"], stype, svalue)
+
+
+def _register_scheduled_tasks(app: "Application") -> None:
+    """Restore all enabled tasks from the DB into the JobQueue at startup."""
+    tasks = db_all_enabled_tasks(DB_PATH)
+    for task in tasks:
+        try:
+            _register_one_task(app, task)
+        except Exception as e:
+            logger.warning("Failed to register task #%s: %s", task["id"], e)
+    if tasks:
+        logger.info("Restored %d scheduled task(s) from DB", len(tasks))
 
 
 # ── Instruction loader ─────────────────────────────────────────────────────────
@@ -469,6 +625,7 @@ def init_db() -> None:
                 updated_at TEXT NOT NULL DEFAULT (datetime('now'))
             );
         """)
+    init_scheduler_table(DB_PATH)
 
 
 def db_get_session(chat_id: int) -> Optional[str]:
@@ -632,6 +789,7 @@ async def run_claude(prompt: str, chat_id: int, silent: bool = False) -> str:
     Run one Claude turn. Returns the final text reply.
     silent=True suppresses NO_REPLY responses (used for flush turns).
     """
+    _current_chat_id.set(chat_id)
     session_id = db_get_session(chat_id)
     system_prompt = build_system_prompt()
 
@@ -785,6 +943,7 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
     with sqlite3.connect(DB_PATH) as con:
         session_count = con.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]
+        task_count = con.execute("SELECT COUNT(*) FROM scheduled_tasks WHERE enabled = 1").fetchone()[0]
 
     memory_md = WORKSPACE / "MEMORY.md"
     memory_size = memory_md.stat().st_size if memory_md.exists() else 0
@@ -795,10 +954,103 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         f"<b>Main status</b>\n"
         f"Uptime: {hours}h {minutes}m {seconds}s\n"
         f"Active sessions: {session_count}\n"
+        f"Scheduled tasks: {task_count}\n"
         f"MEMORY.md: {memory_size:,} bytes\n"
         f"Today's notes: {today_size:,} bytes",
         parse_mode=ParseMode.HTML,
     )
+
+
+async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.message or not update.message.photo:
+        return
+    if not is_allowed(update):
+        return
+
+    if _mcp_ready_event and not _mcp_ready_event.is_set():
+        await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
+        try:
+            await asyncio.wait_for(asyncio.shield(_mcp_ready_event.wait()), timeout=_MCP_PROBE_TIMEOUT)
+        except asyncio.TimeoutError:
+            _mcp_ready_event.set()
+
+    chat_id = update.effective_chat.id
+    photo = update.message.photo[-1]  # highest resolution
+    caption = update.message.caption or ""
+
+    media_dir = WORKSPACE / "media"
+    photo_path = await _media_mod.save_photo(context.bot, photo.file_id, media_dir)
+
+    prompt = (
+        f"The user sent a photo. Analyze it using the Read tool at path: {photo_path}"
+        + (f"\nTheir caption: {caption}" if caption else "")
+    )
+    log_entry = f"[photo]{f' — {caption}' if caption else ''}"
+    db_log(chat_id, "user", log_entry)
+    _flush_mgr.record(chat_id, prompt)
+
+    await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
+    typing_task = asyncio.create_task(_keep_typing(context, chat_id))
+    try:
+        reply = await run_claude(prompt, chat_id)
+    finally:
+        typing_task.cancel()
+
+    db_log(chat_id, "assistant", reply)
+    _flush_mgr.record(chat_id, reply)
+    formatted = md_to_html(reply)
+    for chunk in chunk_text(formatted):
+        try:
+            await update.message.reply_text(chunk, parse_mode=ParseMode.HTML)
+        except Exception:
+            await update.message.reply_text(chunk)
+
+    if _restart_requested:
+        await asyncio.sleep(1)
+        _do_restart()
+
+
+async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.message:
+        return
+    if not is_allowed(update):
+        return
+    voice = update.message.voice or update.message.audio
+    if not voice:
+        return
+
+    if _mcp_ready_event and not _mcp_ready_event.is_set():
+        await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
+        try:
+            await asyncio.wait_for(asyncio.shield(_mcp_ready_event.wait()), timeout=_MCP_PROBE_TIMEOUT)
+        except asyncio.TimeoutError:
+            _mcp_ready_event.set()
+
+    chat_id = update.effective_chat.id
+    await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
+
+    transcript = await _media_mod.transcribe_voice(context.bot, voice.file_id)
+    db_log(chat_id, "user", f"[voice] {transcript}")
+    _flush_mgr.record(chat_id, transcript)
+
+    typing_task = asyncio.create_task(_keep_typing(context, chat_id))
+    try:
+        reply = await run_claude(f"[Voice message transcript]: {transcript}", chat_id)
+    finally:
+        typing_task.cancel()
+
+    db_log(chat_id, "assistant", reply)
+    _flush_mgr.record(chat_id, reply)
+    formatted = md_to_html(reply)
+    for chunk in chunk_text(formatted):
+        try:
+            await update.message.reply_text(chunk, parse_mode=ParseMode.HTML)
+        except Exception:
+            await update.message.reply_text(chunk)
+
+    if _restart_requested:
+        await asyncio.sleep(1)
+        _do_restart()
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -866,7 +1118,7 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
 
 # ── Main ───────────────────────────────────────────────────────────────────────
 def main() -> None:
-    global _mem_index
+    global _mem_index, _app
 
     init_db()
     WORKSPACE.mkdir(parents=True, exist_ok=True)
@@ -894,6 +1146,9 @@ def main() -> None:
         global _mcp_ready_event
         _mcp_ready_event = asyncio.Event()
 
+        # Restore scheduled tasks into the JobQueue
+        _register_scheduled_tasks(app)
+
         installed = get_installed_connectors()
         if installed:
             connector_str = "Connectors: " + ", ".join(installed)
@@ -911,7 +1166,23 @@ def main() -> None:
         if installed:
             asyncio.create_task(_probe_mcp())
 
-    app = (
+        # Start Discord bot if configured
+        discord_token = os.getenv("DISCORD_BOT_TOKEN", "").strip()
+        if discord_token:
+            _raw_discord_users = os.getenv("DISCORD_ALLOWED_USER_IDS", "")
+            _raw_discord_guilds = os.getenv("DISCORD_ALLOWED_GUILD_IDS", "")
+            discord_user_ids: set[int] = {
+                int(x.strip()) for x in _raw_discord_users.split(",") if x.strip()
+            }
+            discord_guild_ids: set[int] = {
+                int(x.strip()) for x in _raw_discord_guilds.split(",") if x.strip()
+            }
+            asyncio.create_task(
+                _discord_mod.start_discord(discord_token, run_claude, discord_user_ids, discord_guild_ids)
+            )
+            logger.info("Discord bot task started")
+
+    _app = app = (
         Application.builder()
         .token(BOT_TOKEN)
         .post_init(_post_init)
@@ -922,6 +1193,8 @@ def main() -> None:
     app.add_handler(CommandHandler("reset", cmd_reset))
     app.add_handler(CommandHandler("status", cmd_status))
     app.add_handler(CommandHandler("restart", cmd_restart))
+    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+    app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, handle_voice))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_error_handler(error_handler)
 

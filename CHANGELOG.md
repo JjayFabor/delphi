@@ -4,6 +4,21 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.8.0] — Media, Scheduled Tasks & Discord — 2026-04-21
+
+### Added
+- **Image understanding** — photo messages are downloaded to `workspaces/main/media/` and passed to Claude via the `Read` tool; Claude can describe images, read diagrams, and act on screenshots
+- **Voice transcription** — voice and audio messages are transcribed and forwarded to Claude as text; supports `WHISPER_PROVIDER=openai` (OpenAI Whisper API) or `WHISPER_PROVIDER=local` (faster-whisper, CPU, no key)
+- **Scheduled tasks** — ask Main to run any task on a schedule: "every 30 minutes", "every day at 9am"; tasks persist in SQLite and resume on restart
+- Three scheduler SDK tools: `scheduler_add`, `scheduler_list`, `scheduler_remove`
+- **Discord channel** — optional second front-end; set `DISCORD_BOT_TOKEN` and Main answers in Discord DMs and @-mentions with the same memory and tools
+- `agents/main/media.py` — photo saving and voice transcription helpers
+- `agents/main/scheduler.py` — task DB schema, persistence, and natural-language schedule parser
+- `agents/main/discord_bot.py` — discord.py client wired to `run_claude`
+- `contextvars.ContextVar` `_current_chat_id` — scheduler tools know which chat called them without Claude passing the ID explicitly
+- `WHISPER_PROVIDER`, `OPENAI_API_KEY`, `DISCORD_BOT_TOKEN`, `DISCORD_ALLOWED_USER_IDS`, `DISCORD_ALLOWED_GUILD_IDS` added to `.env.example`
+- `openai>=1.0,<2` and `discord.py>=2.3,<3` added to `requirements.txt`
+
 ## [0.7.0] — Skills & Sub-agents — 2026-04-21
 
 ### Added
