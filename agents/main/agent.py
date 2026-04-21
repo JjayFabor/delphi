@@ -59,7 +59,7 @@ from agents.main.subagents import list_subagents, create_subagent, run_subagent
 from agents.main.scheduler import (
     init_scheduler_table,
     db_add_task, db_remove_task, db_list_tasks, db_all_enabled_tasks,
-    parse_schedule,
+    parse_schedule, parse_once,
 )
 
 # ── Logging ────────────────────────────────────────────────────────────────────
@@ -99,7 +99,8 @@ _BASE_TOOLS = [
     "connector_list", "connector_add", "connector_remove", "connector_info",
     "skill_list", "skill_read", "skill_write", "skill_delete",
     "subagent_list", "subagent_create", "subagent_run",
-    "scheduler_add", "scheduler_list", "scheduler_remove",
+    "scheduler_add", "scheduler_list", "scheduler_remove", "schedule_once",
+    "send_message",
 ]
 
 def _build_allowed_tools() -> Optional[list[str]]:
@@ -471,6 +472,82 @@ async def tool_scheduler_remove(args: dict) -> dict:
     return {"content": [{"type": "text", "text": f"Task #{task_id} removed."}]}
 
 
+# ── Proactive messaging tools ─────────────────────────────────────────────────
+
+@sdk.tool(
+    name="send_message",
+    description=(
+        "Push a message to the user's chat without waiting for them to ask. "
+        "Use this to proactively send alerts, status updates, or results — "
+        "for example, after completing a long background task, or when a "
+        "monitored condition is met. The message goes to the same chat as the "
+        "current conversation (Telegram or Discord)."
+    ),
+    input_schema={"message": str},
+)
+async def tool_send_message(args: dict) -> dict:
+    message = args.get("message", "").strip()
+    if not message:
+        return {"content": [{"type": "text", "text": "message is required."}], "is_error": True}
+
+    chat_id = _current_chat_id.get()
+    if not chat_id or not _app:
+        return {"content": [{"type": "text", "text": "No active chat context — cannot send proactively."}], "is_error": True}
+
+    formatted = md_to_html(message)
+    for chunk in chunk_text(formatted):
+        try:
+            await _app.bot.send_message(chat_id, chunk, parse_mode=ParseMode.HTML)
+        except Exception:
+            try:
+                await _app.bot.send_message(chat_id, chunk)
+            except Exception as e:
+                return {"content": [{"type": "text", "text": f"Failed to send: {e}"}], "is_error": True}
+
+    logger.info("send_message: pushed to chat %d", chat_id)
+    return {"content": [{"type": "text", "text": "Message sent."}]}
+
+
+@sdk.tool(
+    name="schedule_once",
+    description=(
+        "Run a task exactly once at a future time, then discard it. "
+        "Use this for one-off reminders, follow-ups, and deferred work. "
+        "when_str examples: 'in 30 minutes', 'in 2 hours', 'at 9am', "
+        "'at 14:30', 'tomorrow at 9am'."
+    ),
+    input_schema={"task_prompt": str, "when_str": str},
+)
+async def tool_schedule_once(args: dict) -> dict:
+    task_prompt = args.get("task_prompt", "").strip()
+    when_str = args.get("when_str", "").strip()
+    if not task_prompt or not when_str:
+        return {"content": [{"type": "text", "text": "task_prompt and when_str are required."}], "is_error": True}
+
+    chat_id = _current_chat_id.get()
+    if not chat_id:
+        return {"content": [{"type": "text", "text": "Cannot determine chat context."}], "is_error": True}
+
+    try:
+        fire_at = parse_once(when_str)
+    except ValueError as e:
+        return {"content": [{"type": "text", "text": str(e)}], "is_error": True}
+
+    if not _app or not _app.job_queue:
+        return {"content": [{"type": "text", "text": "Job queue not available."}], "is_error": True}
+
+    task_data = {"chat_id": chat_id, "task_prompt": task_prompt, "id": "once"}
+    _app.job_queue.run_once(
+        _run_scheduled_task,
+        when=fire_at,
+        data=task_data,
+        name=f"once_{chat_id}_{int(fire_at.timestamp())}",
+    )
+
+    fire_str = fire_at.strftime("%Y-%m-%d %H:%M")
+    return {"content": [{"type": "text", "text": f"One-shot task scheduled for {fire_str}."}]}
+
+
 # ── MCP server bundling all tools ─────────────────────────────────────────────
 _memory_mcp = sdk.create_sdk_mcp_server(
     name="memory",
@@ -480,6 +557,7 @@ _memory_mcp = sdk.create_sdk_mcp_server(
         tool_skill_list, tool_skill_read, tool_skill_write, tool_skill_delete,
         tool_subagent_list, tool_subagent_create, tool_subagent_run,
         tool_scheduler_add, tool_scheduler_list, tool_scheduler_remove,
+        tool_send_message, tool_schedule_once,
     ],
 )
 

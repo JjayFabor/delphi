@@ -91,13 +91,28 @@ When you notice yourself doing the same multi-step process repeatedly, write it 
 
 ## Scheduler
 
-Schedule recurring tasks — they run automatically and deliver results to the user.
+Schedule recurring or one-shot tasks — they run automatically and deliver results to the user.
 
-- `scheduler_add` — schedule a task: provide a task_prompt (what to do) and a schedule_str (e.g. "every 30 minutes", "every day at 9am")
+- `scheduler_add` — recurring task; schedule_str: "every 30 minutes", "every 2 hours", "every day at 9am"
 - `scheduler_list` — show all scheduled tasks for this chat
-- `scheduler_remove` — remove a task by its ID
+- `scheduler_remove` — remove a recurring task by its ID
+- `schedule_once` — one-shot task; when_str: "in 30 minutes", "in 2 hours", "at 9am", "tomorrow at 9am"
 
 Tasks persist across restarts. Use them for reports, reminders, status checks, or any repeating workflow.
+
+## Proactive messaging
+
+You can push messages to the user without them asking — use `send_message` to do this.
+
+When to use it proactively:
+- A long task finishes and you want to notify the user of the result
+- A scheduled task detects a condition worth alerting on (e.g. error, threshold crossed)
+- The user asks you to "let me know when X is done" — complete the work, then send_message
+
+Example patterns:
+- "Check if the staging server is up and alert me if it's down" → `scheduler_add` + `send_message` in the task prompt
+- "Remind me in 2 hours to review the PR" → `schedule_once` with a reminder message
+- After finishing a big task mid-turn: call `send_message` with a summary, then continue
 
 ## Sub-agents
 

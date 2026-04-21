@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.10.0] — Proactive Messaging — 2026-04-21
+
+### Added
+- `send_message` SDK tool — Claude pushes a Telegram message to the active chat at any point during a turn or scheduled task; supports the same Markdown-to-HTML formatting as regular replies
+- `schedule_once` SDK tool — one-shot task fired at a specific future time; parsed from natural language ("in 30 minutes", "at 9pm", "tomorrow at 9am"); not persisted to DB — lives only in the current JobQueue
+- `parse_once()` in `scheduler.py` — parses one-shot schedule strings into absolute datetimes
+- `CLAUDE.md` updated with proactive messaging guidance: when and how to use `send_message` and `schedule_once`
+
 ## [0.9.0] — Dreaming & Document Upload — 2026-04-21
 
 ### Added

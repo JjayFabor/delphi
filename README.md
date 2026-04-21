@@ -223,6 +223,20 @@ Ask Main to run any task on a recurring schedule. Tasks persist in SQLite and re
 
 Manage via chat: *"list my scheduled tasks"* / *"remove task #3"*
 
+One-shot tasks also work — fire once and forget:
+
+> *"Remind me in 2 hours to review the PR"*  
+> *"At 4pm today, check if the build passed and tell me"*
+
+## Proactive messaging
+
+Main can message you without you asking first. Use it for alerts, long-task completions, and condition-based notifications.
+
+> *"Check GitHub Actions every 10 minutes and message me when the build passes"*  
+> *"Let me know when the HubSpot deal stage changes"*
+
+Works from both Telegram and Discord.
+
 ---
 
 ## Discord
