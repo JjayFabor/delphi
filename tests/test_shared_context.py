@@ -1,0 +1,46 @@
+import sqlite3
+import tempfile
+from pathlib import Path
+import pytest
+
+from agents.main.shared_context import init_shared_context_tables
+
+
+@pytest.fixture
+def db(tmp_path):
+    db_path = tmp_path / "test.db"
+    init_shared_context_tables(db_path)
+    return db_path
+
+
+def test_tables_created(db):
+    with sqlite3.connect(db) as con:
+        tables = {
+            row[0]
+            for row in con.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+    assert "user_registry" in tables
+    assert "shared_context" in tables
+
+
+def test_user_registry_schema(db):
+    with sqlite3.connect(db) as con:
+        cols = {
+            row[1]
+            for row in con.execute("PRAGMA table_info(user_registry)").fetchall()
+        }
+    assert cols == {"chat_id", "user_id", "username", "full_name", "last_seen"}
+
+
+def test_shared_context_schema(db):
+    with sqlite3.connect(db) as con:
+        cols = {
+            row[1]
+            for row in con.execute("PRAGMA table_info(shared_context)").fetchall()
+        }
+    assert cols == {
+        "id", "from_chat_id", "to_chat_id", "content",
+        "label", "shared_at", "acknowledged", "revoked",
+    }
