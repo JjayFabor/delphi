@@ -899,6 +899,7 @@ def md_to_html(text: str) -> str:
     while i < len(lines):
         line = lines[i]
 
+        # Fenced code block
         if line.startswith("```"):
             lang = line[3:].strip()
             code_lines = []
@@ -914,6 +915,7 @@ def md_to_html(text: str) -> str:
             i += 1
             continue
 
+        # Markdown table (pipe-delimited with separator row)
         if "|" in line and i + 1 < len(lines) and re.match(r"^\s*\|[-| :]+\|\s*$", lines[i + 1]):
             rows: list[list[str]] = []
             while i < len(lines) and "|" in lines[i]:
@@ -923,17 +925,47 @@ def md_to_html(text: str) -> str:
             result.append("<pre>" + html.escape(_format_table(rows)) + "</pre>")
             continue
 
+        # Heading → bold, with blank line before for visual separation
         m = re.match(r"^(#{1,3})\s+(.*)", line)
         if m:
+            if result and result[-1] != "":
+                result.append("")
             result.append("<b>" + _inline(m.group(2)) + "</b>")
             i += 1
             continue
 
+        # Horizontal rule
         if re.match(r"^[-*_]{3,}\s*$", line):
             result.append("─────────────────────")
             i += 1
             continue
 
+        # Blockquote
+        m = re.match(r"^>\s*(.*)", line)
+        if m:
+            result.append("<i>" + _inline(m.group(1)) + "</i>")
+            i += 1
+            continue
+
+        # Unordered list item — supports up to 3 levels of nesting
+        m = re.match(r"^(\s{0,8})[-*+]\s+(.*)", line)
+        if m:
+            depth = len(m.group(1)) // 2
+            prefix = "  " * depth + ("◦" if depth > 0 else "•")
+            result.append(f"{prefix} {_inline(m.group(2))}")
+            i += 1
+            continue
+
+        # Ordered list item — supports up to 3 levels of nesting
+        m = re.match(r"^(\s{0,8})(\d+)\.\s+(.*)", line)
+        if m:
+            depth = len(m.group(1)) // 2
+            prefix = "  " * depth + m.group(2) + "."
+            result.append(f"{prefix} {_inline(m.group(3))}")
+            i += 1
+            continue
+
+        # Regular line (blank lines preserved → paragraph spacing in Telegram)
         result.append(_inline(line))
         i += 1
 
@@ -951,7 +983,8 @@ def _inline(text: str) -> str:
             p = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", p)
             p = re.sub(r"__(.+?)__", r"<b>\1</b>", p)
             p = re.sub(r"\*(.+?)\*", r"<i>\1</i>", p)
-            p = re.sub(r"_(.+?)_", r"<i>\1</i>", p)
+            # Avoid matching underscores inside words (e.g. variable_names)
+            p = re.sub(r"(?<!\w)_(.+?)_(?!\w)", r"<i>\1</i>", p)
             p = re.sub(r"~~(.+?)~~", r"<s>\1</s>", p)
             p = re.sub(r"\[([^\]]+)\]\((https?://[^)]+)\)", r'<a href="\2">\1</a>', p)
             out.append(p)
