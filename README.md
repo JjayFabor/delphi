@@ -276,6 +276,29 @@ Set `DISCORD_BOT_TOKEN` in `.env` and Main appears in Discord too — same memor
 
 ---
 
+## Dashboard
+
+A live read-only dashboard served at `http://localhost:3000`.
+
+Shows: active sessions, scheduled tasks, skills, memory size, connectors, daily notes, recent conversation activity.
+
+Auto-refreshes every 30 seconds.
+
+**Start manually:**
+```bash
+cd dashboard-ui
+npm install
+npm run build
+npm start
+```
+
+**Via systemd (after running install-systemd.sh):**
+```bash
+systemctl --user start claude-dashboard.service
+```
+
+---
+
 ## Configuration reference
 
 | Variable | Default | Description |

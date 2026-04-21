@@ -4,6 +4,16 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.13.0] — Dashboard (Next.js) — 2026-04-21
+
+### Added
+- `dashboard-ui/` — Next.js 14 App Router dashboard; Void Indigo color system; stat cards (sessions, tasks, skills, memory, connectors, daily notes); live activity feed and scheduled tasks list (SWR, 30 s refresh); skills and connectors panels; served on port 3000
+- `dashboard-ui/lib/db.ts` — better-sqlite3 read-only queries for sessions, conversations, scheduled_tasks
+- `dashboard-ui/lib/files.ts` — fs-based helpers for memory stats, skills list, connectors list
+- Five Next.js API routes: /api/stats, /api/activity, /api/tasks, /api/skills, /api/connectors
+- Void Indigo CSS custom properties in globals.css — reusable for landing page and docs
+- `systemd/claude-dashboard.service` — runs `npm start` in dashboard-ui/ on port 3000
+
 ## [0.12.0] — Conversational Learning — 2026-04-21
 
 ### Added

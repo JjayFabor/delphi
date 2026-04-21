@@ -42,3 +42,7 @@ agents/shared/HOUSE_RULES.md
 .idea/
 .vscode/
 *.swp
+
+# Dashboard (Next.js)
+dashboard-ui/.next/
+dashboard-ui/node_modules/

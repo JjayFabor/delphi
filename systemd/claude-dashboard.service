@@ -1,18 +1,16 @@
 [Unit]
-Description=Claude Command Center — Dashboard
-After=network-online.target claude-main.service
+Description=claudhaus — Dashboard (Next.js)
+After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=%h/JjayFiles/claude-command-center
-ExecStart=%h/JjayFiles/claude-command-center/.venv/bin/python -m uvicorn dashboard.app:app --host 127.0.0.1 --port 8000
+WorkingDirectory=%h/JjayFiles/claude-command-center/dashboard-ui
+EnvironmentFile=-%h/JjayFiles/claude-command-center/.env
+ExecStartPre=/home/jjay/.nvm/versions/node/v24.13.1/bin/npm run build
+ExecStart=/home/jjay/.nvm/versions/node/v24.13.1/bin/npm start
 Restart=on-failure
 RestartSec=10
-StartLimitBurst=5
-StartLimitIntervalSec=60
-
-Environment=ANTHROPIC_API_KEY=
 
 StandardOutput=append:%h/JjayFiles/claude-command-center/logs/dashboard.log
 StandardError=append:%h/JjayFiles/claude-command-center/logs/dashboard.log

@@ -15,6 +15,7 @@ UNITS=(
     claude-memory-dreaming.timer
     claude-backup.service
     claude-backup.timer
+    claude-dashboard.service
 )
 
 for unit in "${UNITS[@]}"; do
@@ -43,6 +44,9 @@ echo "  claude-memory-dreaming.timer — enabled"
 
 systemctl --user enable --now claude-backup.timer
 echo "  claude-backup.timer — enabled"
+
+systemctl --user enable --now claude-dashboard.service
+echo "  claude-dashboard.service — enabled + started (http://localhost:3000)"
 
 echo ""
 echo "Done. Useful commands:"
