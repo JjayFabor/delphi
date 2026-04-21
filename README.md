@@ -31,9 +31,9 @@ Claudhaus is what you build when you want one Claude agent that knows you, learn
 
 ## What this is
 
-A single Claude-powered agent ("Main") connected to Telegram. Main handles engineering, DevOps, research, project management, personal ops, CRM work, and anything else you throw at it. It has access to Bash, file tools, web search, and any MCP servers you connect. Memory persists across sessions via plain Markdown files you can read and edit directly.
+A single Claude-powered agent connected to Telegram — shaped entirely by you. Name it, define its role, connect it to your tools, and teach it your workflows just by chatting with it. Memory persists across sessions via plain Markdown files you can read and edit directly.
 
-Everything new — connectors, skills, sub-agents — is added by chatting with Main. No config files. No restarts for most things. No code changes required.
+Everything new — connectors, skills, sub-agents — is added by chatting with your agent. No config files. No restarts for most things. No code changes required.
 
 ---
 
