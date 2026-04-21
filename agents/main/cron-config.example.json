@@ -1,0 +1,19 @@
+{
+  "jobs": [
+    {
+      "name": "daily-backlog-report",
+      "description": "Daily summary of previous day work, backlog, and todos — sent at 5AM local time Mon-Fri",
+      "cron": "3 5 * * 1-5",
+      "timezone_note": "Adjust the cron expression to match your local timezone. Default is 5:03 AM server time.",
+      "recurring": true,
+      "durable": true,
+      "memory_dir": "~/memory",
+      "global_memory_file": "~/MEMORY.md",
+      "delivery": {
+        "type": "telegram",
+        "bot_token": "YOUR_TELEGRAM_BOT_TOKEN",
+        "chat_id": "YOUR_TELEGRAM_CHAT_ID"
+      }
+    }
+  ]
+}

@@ -30,6 +30,9 @@ agents/main/skills/
 # Local Claude Code settings (personal overrides)
 .claude/settings.local.json
 
+# Personal cron job config (copy from cron-config.example.json and fill in your credentials)
+agents/main/cron-config.json
+
 # Personal soul files
 agents/shared/USER_PROFILE.md
 agents/shared/BUSINESS_CONTEXT.md
