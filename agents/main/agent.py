@@ -7,8 +7,10 @@ are sent back as chunked Telegram messages.
 """
 
 import asyncio
+import html
 import logging
 import os
+import re
 import sqlite3
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -156,6 +158,91 @@ def is_allowed(update: Update) -> bool:
     return user_id in ALLOWED_USER_IDS and chat_id in ALLOWED_CHAT_IDS
 
 
+# ── Markdown → Telegram HTML ──────────────────────────────────────────────────
+def md_to_html(text: str) -> str:
+    """
+    Convert Claude's markdown output to Telegram-compatible HTML.
+    Telegram supports: <b> <i> <u> <s> <code> <pre> <a href>
+    Tables are not supported — converted to <pre> blocks.
+    """
+    result = []
+    lines = text.split("\n")
+    i = 0
+
+    while i < len(lines):
+        line = lines[i]
+
+        # ── Fenced code block ──────────────────────────────────────────────────
+        if line.startswith("```"):
+            lang = line[3:].strip()
+            code_lines = []
+            i += 1
+            while i < len(lines) and not lines[i].startswith("```"):
+                code_lines.append(html.escape(lines[i]))
+                i += 1
+            code_body = "\n".join(code_lines)
+            if lang:
+                result.append(f"<pre><code class='language-{html.escape(lang)}'>{code_body}</code></pre>")
+            else:
+                result.append(f"<pre>{code_body}</pre>")
+            i += 1
+            continue
+
+        # ── Markdown table ─────────────────────────────────────────────────────
+        if "|" in line and i + 1 < len(lines) and re.match(r"^\s*\|[-| :]+\|\s*$", lines[i + 1]):
+            table_lines = []
+            while i < len(lines) and "|" in lines[i]:
+                # Strip separator rows
+                if not re.match(r"^\s*\|[-| :]+\|\s*$", lines[i]):
+                    # Clean up cells
+                    cells = [c.strip() for c in lines[i].strip().strip("|").split("|")]
+                    table_lines.append("  ".join(cells))
+                i += 1
+            result.append("<pre>" + html.escape("\n".join(table_lines)) + "</pre>")
+            continue
+
+        # ── Heading ────────────────────────────────────────────────────────────
+        m = re.match(r"^(#{1,3})\s+(.*)", line)
+        if m:
+            result.append("<b>" + _inline(m.group(2)) + "</b>")
+            i += 1
+            continue
+
+        # ── Horizontal rule ────────────────────────────────────────────────────
+        if re.match(r"^[-*_]{3,}\s*$", line):
+            result.append("─────────────────────")
+            i += 1
+            continue
+
+        # ── Regular line ───────────────────────────────────────────────────────
+        result.append(_inline(line))
+        i += 1
+
+    return "\n".join(result)
+
+
+def _inline(text: str) -> str:
+    """Apply inline markdown formatting, HTML-escaping unformatted text."""
+    # Split on code spans first to avoid processing their contents
+    parts = re.split(r"(`[^`]+`)", text)
+    out = []
+    for part in parts:
+        if part.startswith("`") and part.endswith("`") and len(part) > 1:
+            out.append("<code>" + html.escape(part[1:-1]) + "</code>")
+        else:
+            # Bold before italic to handle **text** vs *text*
+            p = html.escape(part)
+            p = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", p)
+            p = re.sub(r"__(.+?)__", r"<b>\1</b>", p)
+            p = re.sub(r"\*(.+?)\*", r"<i>\1</i>", p)
+            p = re.sub(r"_(.+?)_", r"<i>\1</i>", p)
+            p = re.sub(r"~~(.+?)~~", r"<s>\1</s>", p)
+            # Links: [text](url) → <a href="url">text</a>
+            p = re.sub(r"\[([^\]]+)\]\((https?://[^)]+)\)", r'<a href="\2">\1</a>', p)
+            out.append(p)
+    return "".join(out)
+
+
 # ── Message chunker ────────────────────────────────────────────────────────────
 def chunk_text(text: str, max_len: int = TG_MAX_CHARS) -> list[str]:
     """Split text at paragraph or line boundaries to stay under max_len."""
@@ -284,8 +371,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     db_log(chat_id, "assistant", reply)
 
-    for chunk in chunk_text(reply):
-        await update.message.reply_text(chunk)
+    formatted = md_to_html(reply)
+    for chunk in chunk_text(formatted):
+        try:
+            await update.message.reply_text(chunk, parse_mode=ParseMode.HTML)
+        except Exception:
+            # Fall back to plain text if HTML parsing fails
+            await update.message.reply_text(chunk)
 
 
 async def _keep_typing(context: ContextTypes.DEFAULT_TYPE, chat_id: int) -> None:
