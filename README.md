@@ -52,7 +52,7 @@ Everything new — connectors, skills, sub-agents — is added by chatting with 
 ## Quick start
 
 ```bash
-git clone https://github.com/your-username/claudhaus.git
+git clone https://github.com/JjayFabor/claudhaus.git
 cd claudhaus
 python3 scripts/setup.py
 ```
