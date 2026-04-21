@@ -1,4 +1,4 @@
-import { Users, Clock, Pencil, Database, Plug, BookOpen } from 'lucide-react'
+import { Users, Clock, Pencil, Database, Plug, BookOpen, Moon } from 'lucide-react'
 import StatCard from '@/components/StatCard'
 import Panel from '@/components/Panel'
 import ActivityFeed from '@/components/ActivityFeed'
@@ -11,7 +11,7 @@ export const revalidate = 0
 
 export default function DashboardPage() {
   const { session_count, task_count } = getSessionStats()
-  const { memory_kb, daily_notes } = getMemoryStats()
+  const { memory_kb, dreams_count, daily_notes } = getMemoryStats()
   const skill_count = getSkillCount()
   const connector_count = getConnectorCount()
   const skills = getSkills()
@@ -22,13 +22,14 @@ export default function DashboardPage() {
       {/* Stat cards */}
       <div>
         <p className="text-[11px] font-semibold tracking-widest uppercase text-muted mb-3">Overview</p>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
           <StatCard label="Active sessions"   value={session_count}  icon={<Users size={15} />} />
           <StatCard label="Scheduled tasks"   value={task_count}     icon={<Clock size={15} />} />
           <StatCard label="Skills"            value={skill_count}    icon={<Pencil size={15} />} />
           <StatCard label="Memory"            value={memory_kb}      icon={<Database size={15} />} unit="kb" />
           <StatCard label="Connectors"        value={connector_count} icon={<Plug size={15} />} />
           <StatCard label="Daily notes"       value={daily_notes}    icon={<BookOpen size={15} />} />
+          <StatCard label="Dreams"            value={dreams_count}   icon={<Moon size={15} />} />
         </div>
       </div>
 
