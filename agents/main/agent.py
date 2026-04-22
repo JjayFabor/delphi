@@ -1443,6 +1443,10 @@ async def cmd_revoke(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         return
 
     to_chat_id, to_name = result
+    if to_chat_id == chat_id:
+        await update.message.reply_text("You don't have any shared context with yourself.")
+        return
+
     from_name = (update.effective_user.full_name if update.effective_user else None) or str(chat_id)
 
     revoked_ids = db_revoke_shared(
