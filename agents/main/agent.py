@@ -1341,8 +1341,8 @@ async def cmd_share(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.effective_chat.id
     text = update.message.text or ""
 
-    # Strip the /share command prefix
-    body = text.removeprefix("/share").strip()
+    # Strip the /share command prefix (handles /share@botname form in group chats)
+    body = re.sub(r"^/share(?:@\S+)?", "", text, count=1).strip()
     if not body:
         await update.message.reply_text(
             "Usage: /share @username <content>\n"
@@ -1366,8 +1366,10 @@ async def cmd_share(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     try:
         result = db_resolve_user(DB_PATH, target_raw)
-    except ValueError as e:
-        await update.message.reply_text(f"Could not resolve user: {e}")
+    except ValueError:
+        await update.message.reply_text(
+            f"'{target_raw}' matches multiple users. Use a more specific name or @username."
+        )
         return
 
     if result is None:
@@ -1387,12 +1389,15 @@ async def cmd_share(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     # Push notification to recipient
     push_text = f"📤 <b>{html.escape(from_name)}</b> shared something with you:\n{html.escape(content)}"
+    push_failed = False
     try:
         await context.bot.send_message(to_chat_id, push_text, parse_mode=ParseMode.HTML)
     except Exception as e:
         logger.warning("Could not push share notification to %d: %s", to_chat_id, e)
+        push_failed = True
 
-    await update.message.reply_text(f"Shared with {to_name or str(to_chat_id)}.")
+    notice = " (note: could not send them a notification)" if push_failed else ""
+    await update.message.reply_text(f"Shared with {to_name or str(to_chat_id)}.{notice}")
 
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
