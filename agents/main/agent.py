@@ -1143,6 +1143,19 @@ async def run_claude(prompt: str, chat_id: int, silent: bool = False) -> str:
     silent=True suppresses NO_REPLY responses (used for flush turns).
     """
     _current_chat_id.set(chat_id)
+
+    # Inject any unacknowledged shared context as a system note
+    shared = db_get_unacknowledged_shared(DB_PATH, chat_id)
+    if shared:
+        note = format_shared_note(shared)
+        prompt = (
+            f"[System: The following context was shared with you by other users]\n"
+            f"{note}\n"
+            f"---\n\n"
+            f"{prompt}"
+        )
+        db_mark_acknowledged(DB_PATH, chat_id)
+
     session_id = db_get_session(chat_id)
     system_prompt = build_system_prompt()
 
