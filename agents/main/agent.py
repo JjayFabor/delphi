@@ -62,6 +62,17 @@ from agents.main.scheduler import (
     db_add_task, db_remove_task, db_list_tasks, db_all_enabled_tasks,
     parse_schedule, parse_once,
 )
+from agents.main.shared_context import (
+    init_shared_context_tables,
+    db_upsert_user,
+    db_resolve_user,
+    db_share_context,
+    db_get_unacknowledged_shared,
+    db_mark_acknowledged,
+    db_revoke_shared,
+    db_list_shared,
+    format_shared_note,
+)
 
 # ── Logging ────────────────────────────────────────────────────────────────────
 LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -922,6 +933,7 @@ def init_db() -> None:
             );
         """)
     init_scheduler_table(DB_PATH)
+    init_shared_context_tables(DB_PATH)
 
 
 def db_get_session(chat_id: int) -> Optional[str]:
@@ -954,6 +966,15 @@ def db_log(chat_id: int, role: str, content: str) -> None:
             "INSERT INTO conversations (chat_id, role, content) VALUES (?, ?, ?)",
             (chat_id, role, content),
         )
+
+
+def upsert_user(update: Update) -> None:
+    """Record the sender in user_registry so they can be resolved by name for sharing."""
+    user = update.effective_user
+    chat_id = update.effective_chat.id if update.effective_chat else None
+    if user is None or chat_id is None:
+        return
+    db_upsert_user(DB_PATH, chat_id, user.id, user.username, user.full_name)
 
 
 # ── Allowlist ──────────────────────────────────────────────────────────────────
@@ -1295,6 +1316,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
     if not is_allowed(update):
         return
+    upsert_user(update)
 
     if _mcp_ready_event and not _mcp_ready_event.is_set():
         await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
@@ -1344,6 +1366,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
     if not is_allowed(update):
         return
+    upsert_user(update)
     voice = update.message.voice or update.message.audio
     if not voice:
         return
@@ -1387,6 +1410,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
     if not is_allowed(update):
         return
+    upsert_user(update)
 
     if _mcp_ready_event and not _mcp_ready_event.is_set():
         await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
@@ -1449,6 +1473,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
     if not is_allowed(update):
         return
+    upsert_user(update)
 
     # Wait for MCP connections to initialise after startup/restart
     if _mcp_ready_event and not _mcp_ready_event.is_set():
