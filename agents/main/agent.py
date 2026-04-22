@@ -1044,6 +1044,15 @@ def md_to_html(text: str) -> str:
             result.append("<pre>" + html.escape(_format_table(rows)) + "</pre>")
             continue
 
+        # Standalone bold line (e.g. **Phase 3 — …**) → treat as heading with spacing
+        m = re.match(r"^\*\*(.+?)\*\*\s*$", line)
+        if m:
+            if result and result[-1] != "":
+                result.append("")
+            result.append("<b>" + _inline(m.group(1)) + "</b>")
+            i += 1
+            continue
+
         # Heading → bold, with blank line before for visual separation
         m = re.match(r"^(#{1,3})\s+(.*)", line)
         if m:
@@ -1091,23 +1100,38 @@ def md_to_html(text: str) -> str:
     return "\n".join(result)
 
 
+_INLINE_RE = re.compile(
+    r"`(?P<code>[^`\n]+)`"
+    r"|(?:\*\*|__)(?P<bold>(?:\*(?!\*)|[^*])*?)(?:\*\*|__)"
+    r"|\*(?P<italic>[^*\n]+)\*"
+    r"|(?<!\w)_(?P<italic2>[^_\n]+)_(?!\w)"
+    r"|~~(?P<strike>.+?)~~"
+    r"|\[(?P<link_text>[^\]]+)\]\((?P<link_url>https?://[^)]+)\)"
+)
+
+
 def _inline(text: str) -> str:
-    parts = re.split(r"(`[^`]+`)", text)
-    out = []
-    for part in parts:
-        if part.startswith("`") and part.endswith("`") and len(part) > 1:
-            out.append("<code>" + html.escape(part[1:-1]) + "</code>")
-        else:
-            p = html.escape(part)
-            p = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", p)
-            p = re.sub(r"__(.+?)__", r"<b>\1</b>", p)
-            p = re.sub(r"\*(.+?)\*", r"<i>\1</i>", p)
-            # Avoid matching underscores inside words (e.g. variable_names)
-            p = re.sub(r"(?<!\w)_(.+?)_(?!\w)", r"<i>\1</i>", p)
-            p = re.sub(r"~~(.+?)~~", r"<s>\1</s>", p)
-            p = re.sub(r"\[([^\]]+)\]\((https?://[^)]+)\)", r'<a href="\2">\1</a>', p)
-            out.append(p)
-    return "".join(out)
+    result = []
+    pos = 0
+    for m in _INLINE_RE.finditer(text):
+        if m.start() > pos:
+            result.append(html.escape(text[pos:m.start()]))
+        if m.group("code") is not None:
+            result.append(f"<code>{html.escape(m.group('code'))}</code>")
+        elif m.group("bold") is not None:
+            result.append(f"<b>{_inline(m.group('bold'))}</b>")
+        elif m.group("italic") is not None:
+            result.append(f"<i>{html.escape(m.group('italic'))}</i>")
+        elif m.group("italic2") is not None:
+            result.append(f"<i>{html.escape(m.group('italic2'))}</i>")
+        elif m.group("strike") is not None:
+            result.append(f"<s>{html.escape(m.group('strike'))}</s>")
+        elif m.group("link_text") is not None:
+            result.append(f'<a href="{html.escape(m.group("link_url"))}">{html.escape(m.group("link_text"))}</a>')
+        pos = m.end()
+    if pos < len(text):
+        result.append(html.escape(text[pos:]))
+    return "".join(result)
 
 
 # ── Message chunker ────────────────────────────────────────────────────────────
@@ -1176,9 +1200,12 @@ async def run_claude(prompt: str, chat_id: int, silent: bool = False) -> str:
     try:
         async for event in sdk.query(prompt=prompt, options=options):
             if isinstance(event, sdk.AssistantMessage):
-                for block in event.content:
-                    if isinstance(block, sdk.TextBlock):
-                        reply_parts.append(block.text)
+                msg_text = "".join(
+                    block.text for block in event.content
+                    if isinstance(block, sdk.TextBlock)
+                )
+                if msg_text.strip():
+                    reply_parts.append(msg_text)
                 if event.session_id:
                     new_session_id = event.session_id
             elif isinstance(event, sdk.ResultMessage):
@@ -1198,7 +1225,7 @@ async def run_claude(prompt: str, chat_id: int, silent: bool = False) -> str:
     if new_session_id:
         db_save_session(chat_id, new_session_id)
 
-    reply = "".join(reply_parts).strip()
+    reply = "\n\n".join(reply_parts).strip()
 
     if silent and reply == "NO_REPLY":
         return ""
