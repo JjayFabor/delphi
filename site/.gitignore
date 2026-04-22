@@ -1,0 +1,6 @@
+node_modules/
+.next/
+out/
+public/pagefind/
+*.tsbuildinfo
+.env*.local

@@ -1,0 +1,39 @@
+{
+  "name": "claudhaus-site",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "postbuild": "npx pagefind --site out --output-path public/pagefind",
+    "start": "next start",
+    "lint": "next lint",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "next": "14.2.3",
+    "react": "^18",
+    "react-dom": "^18",
+    "next-themes": "^0.4.6",
+    "next-mdx-remote": "^5.0.0",
+    "gray-matter": "^4.0.3",
+    "lucide-react": "^0.378.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "autoprefixer": "^10.0.1",
+    "eslint": "^8",
+    "eslint-config-next": "14.2.3",
+    "postcss": "^8",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5",
+    "pagefind": "^1.1.0",
+    "shiki": "^1.6.1",
+    "vitest": "^1.6.0",
+    "@vitejs/plugin-react": "^4.2.1",
+    "@testing-library/react": "^15.0.0",
+    "@testing-library/jest-dom": "^6.4.2"
+  }
+}
