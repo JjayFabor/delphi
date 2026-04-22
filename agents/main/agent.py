@@ -969,7 +969,10 @@ def db_log(chat_id: int, role: str, content: str) -> None:
 
 
 def upsert_user(update: Update) -> None:
-    """Record the sender in user_registry so they can be resolved by name for sharing."""
+    """Record the sender in user_registry so they can be resolved by name for sharing.
+
+    Must only be called after is_allowed(update) returns True.
+    """
     user = update.effective_user
     chat_id = update.effective_chat.id if update.effective_chat else None
     if user is None or chat_id is None:
