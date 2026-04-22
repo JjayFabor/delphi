@@ -1160,6 +1160,7 @@ async def run_claude(prompt: str, chat_id: int, silent: bool = False) -> str:
     system_prompt = build_system_prompt()
 
     options = sdk.ClaudeAgentOptions(
+        model="claude-sonnet-4-6",
         system_prompt=system_prompt,
         cwd=str(WORKSPACE),
         resume=session_id,
