@@ -3,6 +3,14 @@ from pathlib import Path
 import pytest
 
 from agents.main.shared_context import init_shared_context_tables, db_upsert_user, db_resolve_user
+from agents.main.shared_context import (
+    db_share_context,
+    db_get_unacknowledged_shared,
+    db_mark_acknowledged,
+    db_revoke_shared,
+    db_list_shared,
+    format_shared_note,
+)
 
 
 @pytest.fixture
@@ -97,3 +105,62 @@ def test_resolve_user_null_full_name(db):
     db_upsert_user(db, chat_id=100, user_id=1, username="jay", full_name=None)
     result = db_resolve_user(db, "jay")
     assert result == (100, None)
+
+
+def test_share_context_inserts(db):
+    db_upsert_user(db, 100, 1, "jay", "Jay Fabor")
+    row_id = db_share_context(db, from_chat_id=100, to_chat_id=200, content="hello")
+    assert isinstance(row_id, int)
+    with sqlite3.connect(db) as con:
+        row = con.execute("SELECT * FROM shared_context WHERE id=?", (row_id,)).fetchone()
+    assert row[3] == "hello"
+    assert row[6] == 0  # acknowledged
+    assert row[7] == 0  # revoked
+
+
+def test_get_unacknowledged_empty(db):
+    assert db_get_unacknowledged_shared(db, chat_id=200) == []
+
+
+def test_get_unacknowledged_returns_items(db):
+    db_upsert_user(db, 100, 1, "jay", "Jay Fabor")
+    db_share_context(db, from_chat_id=100, to_chat_id=200, content="hello")
+    items = db_get_unacknowledged_shared(db, chat_id=200)
+    assert len(items) == 1
+    assert items[0]["content"] == "hello"
+    assert items[0]["from_name"] == "Jay Fabor"
+
+
+def test_mark_acknowledged(db):
+    db_upsert_user(db, 100, 1, "jay", "Jay Fabor")
+    db_share_context(db, from_chat_id=100, to_chat_id=200, content="hello")
+    db_mark_acknowledged(db, chat_id=200)
+    assert db_get_unacknowledged_shared(db, chat_id=200) == []
+
+
+def test_revoke_shared(db):
+    db_upsert_user(db, 100, 1, "jay", "Jay Fabor")
+    db_share_context(db, from_chat_id=100, to_chat_id=200, content="the API uses REST")
+    revoked = db_revoke_shared(db, from_chat_id=100, to_chat_id=200, content_hint="API")
+    assert len(revoked) == 1
+    items = db_list_shared(db, to_chat_id=200)
+    assert items == []
+
+
+def test_list_shared_excludes_revoked(db):
+    db_upsert_user(db, 100, 1, "jay", "Jay Fabor")
+    db_share_context(db, from_chat_id=100, to_chat_id=200, content="keep this")
+    db_share_context(db, from_chat_id=100, to_chat_id=200, content="revoke this")
+    db_revoke_shared(db, from_chat_id=100, to_chat_id=200, content_hint="revoke this")
+    items = db_list_shared(db, to_chat_id=200)
+    assert len(items) == 1
+    assert items[0]["content"] == "keep this"
+
+
+def test_format_shared_note(db):
+    db_upsert_user(db, 100, 1, "jay", "Jay Fabor")
+    db_share_context(db, from_chat_id=100, to_chat_id=200, content="use REST not GraphQL")
+    items = db_get_unacknowledged_shared(db, chat_id=200)
+    note = format_shared_note(items)
+    assert "Jay Fabor" in note
+    assert "use REST not GraphQL" in note

@@ -87,3 +87,96 @@ def db_resolve_user(db_path: Path, name: str) -> Optional[tuple[int, Optional[st
         names = ", ".join(r[1] or str(r[0]) for r in rows)
         raise ValueError(f"ambiguous: matches {names}")
     return rows[0][0], rows[0][1]
+
+
+def db_share_context(
+    db_path: Path,
+    from_chat_id: int,
+    to_chat_id: int,
+    content: str,
+    label: Optional[str] = None,
+) -> int:
+    """Insert a shared context item. Returns the new row id."""
+    with sqlite3.connect(db_path) as con:
+        cur = con.execute(
+            """INSERT INTO shared_context (from_chat_id, to_chat_id, content, label)
+               VALUES (?, ?, ?, ?)""",
+            (from_chat_id, to_chat_id, content, label),
+        )
+        return cur.lastrowid
+
+
+def db_get_unacknowledged_shared(db_path: Path, chat_id: int) -> list[dict]:
+    """Return unacknowledged, non-revoked shared items for chat_id."""
+    with sqlite3.connect(db_path) as con:
+        con.row_factory = sqlite3.Row
+        rows = con.execute(
+            """SELECT sc.id, sc.from_chat_id, sc.content, sc.shared_at,
+                      COALESCE(ur.full_name, cast(sc.from_chat_id as text)) as from_name
+               FROM shared_context sc
+               LEFT JOIN user_registry ur ON ur.chat_id = sc.from_chat_id
+               WHERE sc.to_chat_id = ? AND sc.acknowledged = 0 AND sc.revoked = 0
+               ORDER BY sc.shared_at ASC""",
+            (chat_id,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def db_mark_acknowledged(db_path: Path, chat_id: int) -> None:
+    """Mark all unacknowledged shared items for chat_id as read."""
+    with sqlite3.connect(db_path) as con:
+        con.execute(
+            "UPDATE shared_context SET acknowledged=1 WHERE to_chat_id=? AND acknowledged=0",
+            (chat_id,),
+        )
+
+
+def db_revoke_shared(
+    db_path: Path, from_chat_id: int, to_chat_id: int, content_hint: str
+) -> list[int]:
+    """
+    Soft-delete shared items from from_chat_id to to_chat_id matching content_hint.
+    Matches by label (exact) or content substring. Returns list of revoked row ids.
+    """
+    hint_lower = content_hint.lower()
+    with sqlite3.connect(db_path) as con:
+        rows = con.execute(
+            """SELECT id FROM shared_context
+               WHERE from_chat_id=? AND to_chat_id=? AND revoked=0
+                 AND (lower(label)=? OR lower(content) LIKE ?)""",
+            (from_chat_id, to_chat_id, hint_lower, f"%{hint_lower}%"),
+        ).fetchall()
+        ids = [r[0] for r in rows]
+        if ids:
+            con.execute(
+                f"UPDATE shared_context SET revoked=1 WHERE id IN ({','.join('?' * len(ids))})",
+                ids,
+            )
+    return ids
+
+
+def db_list_shared(db_path: Path, to_chat_id: int) -> list[dict]:
+    """Return all non-revoked shared items for chat_id, newest first."""
+    with sqlite3.connect(db_path) as con:
+        con.row_factory = sqlite3.Row
+        rows = con.execute(
+            """SELECT sc.id, sc.from_chat_id, sc.content, sc.shared_at, sc.label,
+                      COALESCE(ur.full_name, cast(sc.from_chat_id as text)) as from_name
+               FROM shared_context sc
+               LEFT JOIN user_registry ur ON ur.chat_id = sc.from_chat_id
+               WHERE sc.to_chat_id=? AND sc.revoked=0
+               ORDER BY sc.from_chat_id, sc.shared_at DESC""",
+            (to_chat_id,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def format_shared_note(items: list[dict]) -> str:
+    """Format a list of shared items as a system note for Claude injection."""
+    if not items:
+        return ""
+    lines = []
+    for item in items:
+        date_str = item["shared_at"][:10]
+        lines.append(f"From {item['from_name']} ({date_str}): {item['content']}")
+    return "\n".join(lines)
