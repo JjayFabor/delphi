@@ -870,7 +870,7 @@ def load_instructions(agent_dir: Path) -> Path:
     return generic
 
 
-def build_system_prompt() -> str:
+def build_system_prompt(message: str = "") -> str:
     """
     Injection order:
       1. USER_PROFILE.md
@@ -907,7 +907,7 @@ def build_system_prompt() -> str:
 
     parts.append(load_instructions(AGENT_DIR).read_text().strip())
 
-    skills_text = _skills_mod.load_all()
+    skills_text = _skills_mod.load_relevant(message)
     if skills_text:
         parts.append("## Skills\n\n" + skills_text)
 
@@ -931,9 +931,32 @@ def init_db() -> None:
                 session_id TEXT NOT NULL,
                 updated_at TEXT NOT NULL DEFAULT (datetime('now'))
             );
+            CREATE TABLE IF NOT EXISTS token_usage (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                chat_id      INTEGER NOT NULL,
+                ts           TEXT NOT NULL DEFAULT (datetime('now')),
+                input_tokens INTEGER,
+                output_tokens INTEGER,
+                total_cost_usd REAL
+            );
         """)
     init_scheduler_table(DB_PATH)
     init_shared_context_tables(DB_PATH)
+
+
+def _log_usage(chat_id: int, usage: dict, cost: Optional[float]) -> None:
+    input_tok = usage.get("input_tokens", 0)
+    output_tok = usage.get("output_tokens", 0)
+    logger.info(
+        "token_usage chat=%d: %d in / %d out | $%.5f",
+        chat_id, input_tok, output_tok, cost or 0,
+    )
+    with sqlite3.connect(DB_PATH) as con:
+        con.execute(
+            "INSERT INTO token_usage (chat_id, input_tokens, output_tokens, total_cost_usd)"
+            " VALUES (?, ?, ?, ?)",
+            (chat_id, input_tok, output_tok, cost),
+        )
 
 
 def db_get_session(chat_id: int) -> Optional[str]:
@@ -1181,7 +1204,7 @@ async def run_claude(prompt: str, chat_id: int, silent: bool = False) -> str:
         db_mark_acknowledged(DB_PATH, chat_id)
 
     session_id = db_get_session(chat_id)
-    system_prompt = build_system_prompt()
+    system_prompt = build_system_prompt(prompt)
 
     options = sdk.ClaudeAgentOptions(
         model="claude-sonnet-4-6",
@@ -1211,6 +1234,8 @@ async def run_claude(prompt: str, chat_id: int, silent: bool = False) -> str:
             elif isinstance(event, sdk.ResultMessage):
                 if event.session_id:
                     new_session_id = event.session_id
+                if event.usage:
+                    _log_usage(chat_id, event.usage, event.total_cost_usd)
     except sdk.CLINotFoundError:
         logger.error("claude CLI not found")
         return "Error: claude CLI not found. Make sure `claude` is installed and authenticated."
@@ -1338,11 +1363,21 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     with sqlite3.connect(DB_PATH) as con:
         session_count = con.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]
         task_count = con.execute("SELECT COUNT(*) FROM scheduled_tasks WHERE enabled = 1").fetchone()[0]
+        today_usage = con.execute(
+            "SELECT COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0),"
+            " COALESCE(SUM(total_cost_usd),0) FROM token_usage WHERE date(ts)=date('now')"
+        ).fetchone()
+        total_usage = con.execute(
+            "SELECT COALESCE(SUM(total_cost_usd),0) FROM token_usage"
+        ).fetchone()
 
     memory_md = WORKSPACE / "MEMORY.md"
     memory_size = memory_md.stat().st_size if memory_md.exists() else 0
     today_note = WORKSPACE / "memory" / f"{date.today().isoformat()}.md"
     today_size = today_note.stat().st_size if today_note.exists() else 0
+
+    today_in, today_out, today_cost = today_usage
+    total_cost = total_usage[0]
 
     await update.message.reply_text(
         f"<b>Main status</b>\n"
@@ -1350,7 +1385,11 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         f"Active sessions: {session_count}\n"
         f"Scheduled tasks: {task_count}\n"
         f"MEMORY.md: {memory_size:,} bytes\n"
-        f"Today's notes: {today_size:,} bytes",
+        f"Today's notes: {today_size:,} bytes\n"
+        f"\n<b>Token usage (today)</b>\n"
+        f"Input: {today_in:,} | Output: {today_out:,}\n"
+        f"Today cost: ${today_cost:.4f}\n"
+        f"Total cost: ${total_cost:.4f}",
         parse_mode=ParseMode.HTML,
     )
 
