@@ -1666,13 +1666,18 @@ async def _handle_pull(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await update.message.reply_text("Nothing has been shared with you yet.")
         return
 
-    # Group by sender
-    grouped: dict[str, list[dict]] = {}
+    # Group by sender (stable by chat_id; from_name used only for display)
+    grouped: dict[int, dict] = {}
     for item in items:
-        grouped.setdefault(item["from_name"], []).append(item)
+        cid = item["from_chat_id"]
+        if cid not in grouped:
+            grouped[cid] = {"name": item["from_name"], "items": []}
+        grouped[cid]["items"].append(item)
 
     lines = ["📥 <b>Shared with you:</b>\n"]
-    for from_name, sender_items in grouped.items():
+    for sender in grouped.values():
+        sender_items = sender["items"]
+        from_name = sender["name"]
         lines.append(f"<b>From {html.escape(from_name)}</b> ({len(sender_items)} item(s))")
         for item in sender_items:
             date_str = item["shared_at"][:10]
@@ -1681,6 +1686,7 @@ async def _handle_pull(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     formatted = "\n".join(lines).strip()
     await update.message.reply_text(formatted, parse_mode=ParseMode.HTML)
+    db_mark_acknowledged(DB_PATH, chat_id)
 
     # Inject into Claude session so the AI knows about it
     note = format_shared_note(items)
@@ -1691,12 +1697,16 @@ async def _handle_pull(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         f"The user asked to see their shared context. I've shown them the list above. "
         f"Acknowledge briefly."
     )
+    await maybe_flush(chat_id)
     await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
     typing_task = asyncio.create_task(_keep_typing(context, chat_id))
     try:
         reply = await run_claude(inject_prompt, chat_id)
     finally:
         typing_task.cancel()
+
+    db_log(chat_id, "assistant", reply)
+    _flush_mgr.record(chat_id, reply)
 
     if reply and reply != "(no response)":
         for chunk in chunk_text(md_to_html(reply)):
