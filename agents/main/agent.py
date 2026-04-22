@@ -76,6 +76,7 @@ from agents.main.shared_context import (
 
 # ── Logging ────────────────────────────────────────────────────────────────────
 LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+os.umask(0o077)  # new files (logs, DB journals) created owner-only (600/700)
 _handler = RotatingFileHandler(LOG_PATH, maxBytes=5 * 1024 * 1024, backupCount=3)
 logging.basicConfig(
     level=logging.INFO,
