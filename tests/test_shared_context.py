@@ -91,3 +91,9 @@ def test_resolve_user_ambiguous_raises(db):
     db_upsert_user(db, chat_id=101, user_id=2, username=None, full_name="Jay Two")
     with pytest.raises(ValueError, match="ambiguous"):
         db_resolve_user(db, "Jay")
+
+
+def test_resolve_user_null_full_name(db):
+    db_upsert_user(db, chat_id=100, user_id=1, username="jay", full_name=None)
+    result = db_resolve_user(db, "jay")
+    assert result == (100, None)

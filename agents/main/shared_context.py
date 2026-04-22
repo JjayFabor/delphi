@@ -39,6 +39,7 @@ def db_upsert_user(
     username: Optional[str],
     full_name: Optional[str],
 ) -> None:
+    """Insert or update a user in user_registry. Updates all fields and last_seen on conflict."""
     with sqlite3.connect(db_path) as con:
         con.execute(
             """INSERT INTO user_registry (chat_id, user_id, username, full_name, last_seen)
@@ -52,19 +53,33 @@ def db_upsert_user(
         )
 
 
-def db_resolve_user(db_path: Path, name: str) -> Optional[tuple[int, str]]:
+def db_resolve_user(db_path: Path, name: str) -> Optional[tuple[int, Optional[str]]]:
     """
     Resolve a name/username to (chat_id, full_name).
-    Matches on username (exact, case-insensitive) or full_name (partial, case-insensitive).
+    Priority 1: exact username match (case-insensitive).
+    Priority 2: partial full_name match (case-insensitive) — only if no username hit.
     Returns None if not found. Raises ValueError if ambiguous.
     """
     name_lower = name.lstrip("@").lower()
+
+    # Priority 1: exact username match
     with sqlite3.connect(db_path) as con:
         rows = con.execute(
-            """SELECT chat_id, full_name FROM user_registry
-               WHERE lower(username) = ?
-                  OR lower(full_name) LIKE ?""",
-            (name_lower, f"%{name_lower}%"),
+            "SELECT chat_id, full_name FROM user_registry WHERE lower(username) = ?",
+            (name_lower,),
+        ).fetchall()
+    if len(rows) == 1:
+        return rows[0][0], rows[0][1]
+    if len(rows) > 1:
+        names = ", ".join(r[1] or str(r[0]) for r in rows)
+        raise ValueError(f"ambiguous: matches {names}")
+
+    # Priority 2: partial full_name match (only if no username hit)
+    like_safe = name_lower.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    with sqlite3.connect(db_path) as con:
+        rows = con.execute(
+            "SELECT chat_id, full_name FROM user_registry WHERE lower(full_name) LIKE ? ESCAPE '\\'",
+            (f"%{like_safe}%",),
         ).fetchall()
     if not rows:
         return None
