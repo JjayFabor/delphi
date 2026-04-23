@@ -1,0 +1,53 @@
+---
+title: learn
+description: Encode a lesson into long-term memory.
+---
+
+Writes a durable fact, rule, or preference to the appropriate memory file so it applies to all future sessions.
+
+## Parameters
+
+| Name | Type | Required | Description |
+|---|---|---|---|
+| `lesson` | string | ✓ | The fact, rule, or preference to remember |
+| `category` | string | ✓ | Where to store it (see below) |
+| `skill_name` | string | — | Slug for the skill file (only when `category="skill"`) |
+
+## Categories
+
+| Category | Written to | Use for |
+|---|---|---|
+| `skill` | New skill file in `skills/` | Repeatable workflows, formatting rules |
+| `behavior` | `HOUSE_RULES.md` | Always/never rules about how to act |
+| `preference` | `USER_PROFILE.md` | Working style, communication preferences |
+| `context` | `BUSINESS_CONTEXT.md` | Business, project, team, or tech stack facts |
+
+## Examples
+
+```
+learn(
+  lesson="Always reply in short form unless the user explicitly asks for detail",
+  category="preference"
+)
+
+learn(
+  lesson="We use NZD for all financial figures. Never use USD.",
+  category="context"
+)
+
+learn(
+  lesson="Never send a Slack message without showing the user a draft first",
+  category="behavior"
+)
+
+learn(
+  lesson="When the user says 'morning report', pull GitHub PRs and format as...",
+  category="skill",
+  skill_name="morning-report"
+)
+```
+
+## Notes
+
+- The agent calls `learn` proactively — you rarely need to call it directly.
+- Trigger it naturally: "remember that...", "always...", "never...", "from now on...", "I prefer..."

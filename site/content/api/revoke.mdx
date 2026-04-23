@@ -1,0 +1,25 @@
+---
+title: revoke
+description: Revoke shared context before it's seen.
+---
+
+Soft-deletes shared context you previously sent to another user. Prevents it from being injected into their future sessions.
+
+## Usage
+
+```
+/revoke @username use REST not GraphQL
+revoke what I shared with John about the API
+```
+
+## How it works
+
+1. Matches the row in `shared_context` by sender + recipient + content/label fuzzy match
+2. Sets `revoked = 1` (soft delete — row is kept for audit)
+3. Sends the recipient a notification: "John revoked shared context: use REST not GraphQL"
+
+## Notes
+
+- Revocation prevents future injection and hides items from `/shared` pulls.
+- Context already injected into an active Claude session is not retroactively removed — Claude has already seen it.
+- You cannot revoke context on behalf of another user.

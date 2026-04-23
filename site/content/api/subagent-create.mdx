@@ -1,0 +1,32 @@
+---
+title: subagent_create
+description: Create a new focused sub-agent.
+---
+
+Defines a new sub-agent with its own system prompt and tool set. The agent is stored and can be run on demand.
+
+## Parameters
+
+| Name | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | ✓ | Slug identifier (e.g. `researcher`, `code-reviewer`) |
+| `description` | string | ✓ | One-line description of what it does |
+| `system_prompt` | string | ✓ | Full system prompt for the sub-agent |
+| `tools` | string[] | ✓ | Tools the sub-agent can use |
+
+## Example
+
+```
+subagent_create(
+  name="researcher",
+  description="Searches and summarizes web content on a given topic",
+  system_prompt="You are a research specialist. Given a topic, search the web comprehensively, read the most relevant sources, and produce a structured summary with key findings and sources.",
+  tools=["WebSearch", "WebFetch", "Read"]
+)
+```
+
+## Notes
+
+- Give sub-agents only the tools they need. `["WebSearch", "WebFetch"]` for a researcher, not `["*"]`.
+- The system prompt starts from scratch — the sub-agent does not inherit the main agent's memory or context.
+- Use `subagent_run` to execute tasks with the sub-agent.

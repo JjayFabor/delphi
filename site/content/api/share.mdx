@@ -1,0 +1,27 @@
+---
+title: share
+description: Share context with another Claudhaus user.
+---
+
+Sends a piece of context to another user. They receive a push notification and the context is injected into their next Claude session.
+
+## Usage
+
+```
+/share @username Here's what we decided about the API — use REST not GraphQL
+share with John: the staging credentials are in 1Password under "Staging DB"
+```
+
+## How it works
+
+1. The sender's message is resolved to a target user via the user registry
+2. A row is inserted into `shared_context` with `acknowledged = 0`
+3. The recipient receives a push notification immediately
+4. On the recipient's next message, the shared context is prepended to their Claude prompt
+5. The item is marked `acknowledged = 1`
+
+## Notes
+
+- The target user must have previously messaged the bot (they must be in the user registry).
+- If the username is ambiguous, the bot asks for clarification.
+- Use `/revoke` to soft-delete shared context before the recipient's next session.

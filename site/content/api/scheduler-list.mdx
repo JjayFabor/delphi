@@ -1,0 +1,41 @@
+---
+title: scheduler_list
+description: List all scheduled tasks.
+---
+
+Returns all recurring and one-shot scheduled tasks for the current chat.
+
+## Parameters
+
+None.
+
+## Returns
+
+A list of tasks, each with:
+
+| Field | Description |
+|---|---|
+| `id` | Unique task ID (used with `scheduler_remove`) |
+| `task` | The task prompt |
+| `schedule_str` | The human-readable schedule |
+| `last_run` | When the task last ran (ISO timestamp or null) |
+| `next_run` | When the task will next run |
+
+## Example
+
+```
+scheduler_list()
+```
+
+Response:
+```
+Scheduled tasks (2):
+
+ID: 7a3f  |  every day at 9am
+Task: List open GitHub PRs older than 2 days and send_message a summary
+Last run: 2026-04-23 09:00:02
+
+ID: 2b1c  |  every Monday at 8am
+Task: Send weekly summary of memory notes
+Last run: 2026-04-21 08:00:14
+```

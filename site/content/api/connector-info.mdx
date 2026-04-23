@@ -1,0 +1,33 @@
+---
+title: connector_info
+description: Get required credentials for a connector.
+---
+
+Returns the credentials needed to set up a given connector, and instructions for where to get them.
+
+## Parameters
+
+| Name | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | ✓ | Connector name (e.g. `github`, `hubspot`, `slack`) |
+
+## Example
+
+```
+connector_info(name="github")
+```
+
+Response:
+```
+GitHub connector requires:
+
+GITHUB_TOKEN
+  A Personal Access Token with repo, read:org scopes.
+  Get one at: https://github.com/settings/tokens/new
+  Select scopes: repo (full), read:org
+```
+
+## Notes
+
+- Call this before `connector_add` to know exactly what to prepare.
+- The agent calls this automatically when you say "add the GitHub connector" — you rarely need to call it directly.

@@ -1,0 +1,52 @@
+---
+title: Read / Write / Edit
+description: Read and modify files in the agent's workspace.
+---
+
+## Read
+
+Reads a file and returns its contents.
+
+| Name | Type | Required | Description |
+|---|---|---|---|
+| `file_path` | string | ✓ | Absolute path to the file |
+| `limit` | number | — | Number of lines to read |
+| `offset` | number | — | Line number to start from |
+
+```json
+{ "file_path": "/home/user/project/README.md", "limit": 50 }
+```
+
+## Write
+
+Creates or overwrites a file with new content.
+
+| Name | Type | Required | Description |
+|---|---|---|---|
+| `file_path` | string | ✓ | Absolute path to write |
+| `content` | string | ✓ | Full file content |
+
+```json
+{ "file_path": "/home/user/project/notes.md", "content": "# Notes\n\nMeeting at 3pm." }
+```
+
+## Edit
+
+Replaces a specific string within an existing file.
+
+| Name | Type | Required | Description |
+|---|---|---|---|
+| `file_path` | string | ✓ | Absolute path to the file |
+| `old_string` | string | ✓ | Exact text to find and replace |
+| `new_string` | string | ✓ | Replacement text |
+| `replace_all` | boolean | — | Replace all occurrences (default: false) |
+
+```json
+{
+  "file_path": "/home/user/project/config.py",
+  "old_string": "DEBUG = False",
+  "new_string": "DEBUG = True"
+}
+```
+
+<Note>Edit fails if `old_string` is not found in the file. Read the file first to confirm the exact text.</Note>

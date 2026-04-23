@@ -1,0 +1,32 @@
+---
+title: schedule_once
+description: Schedule a one-shot task at a specific time.
+---
+
+Schedules a task to run once at a specified time. The task is removed after it runs.
+
+## Parameters
+
+| Name | Type | Required | Description |
+|---|---|---|---|
+| `task` | string | ✓ | The prompt to run |
+| `when_str` | string | ✓ | When to run (see examples below) |
+
+## When examples
+
+| `when_str` | When it runs |
+|---|---|
+| `"in 30 minutes"` | 30 minutes from now |
+| `"in 2 hours"` | 2 hours from now |
+| `"at 3pm"` | Today at 3:00 PM (server timezone) |
+| `"tomorrow at 9am"` | Tomorrow at 9:00 AM |
+
+## Example
+
+```
+schedule_once(
+  task="send_message('Time to review the staging deploy')",
+  when_str="in 2 hours"
+)
+# → Scheduled for 2026-04-23 16:42:00. I'll remind you then.
+```

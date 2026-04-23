@@ -3,4 +3,28 @@ title: API Reference Overview
 description: Tools and commands available in Claudhaus.
 ---
 
-Claudhaus exposes two categories of tools: built-in filesystem tools and agent SDK tools.
+Claudhaus exposes two categories of tools to the Claude agent:
+
+## Built-in filesystem tools
+
+These are standard Claude Code tools available in every session:
+
+| Tool | Purpose |
+|---|---|
+| [Bash](/api-reference/bash) | Run shell commands |
+| [Read / Write / Edit](/api-reference/read-write-edit) | Read and modify files |
+| [Glob / Grep](/api-reference/glob-grep) | Find files and search content |
+
+## Agent SDK tools
+
+These tools are added by Claudhaus and control the agent's extended capabilities:
+
+| Category | Tools |
+|---|---|
+| Scheduling | `scheduler_add`, `scheduler_list`, `scheduler_remove`, `schedule_once` |
+| Sub-agents | `subagent_list`, `subagent_create`, `subagent_run` |
+| Connectors | `connector_info`, `connector_add` |
+| Shared context | `share`, `revoke`, `shared` |
+| Learning | `learn`, `skill_list`, `skill_read`, `skill_write`, `skill_delete` |
+
+<Note>These are tools used by the agent internally, not an HTTP API. You interact with them via natural language in Telegram — the agent calls them on your behalf.</Note>

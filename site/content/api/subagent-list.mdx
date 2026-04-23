@@ -1,0 +1,33 @@
+---
+title: subagent_list
+description: List all defined sub-agents.
+---
+
+Returns all sub-agents that have been created for this chat.
+
+## Parameters
+
+None.
+
+## Returns
+
+A list of sub-agents, each with:
+
+| Field | Description |
+|---|---|
+| `name` | Unique slug identifier |
+| `description` | What the sub-agent does |
+
+## Example
+
+```
+subagent_list()
+```
+
+Response:
+```
+Sub-agents (2):
+
+researcher — Searches and summarizes web content
+code-reviewer — Reviews Python code for correctness and style
+```

@@ -1,0 +1,38 @@
+---
+title: scheduler_add
+description: Add a recurring scheduled task.
+---
+
+Adds a task that runs on a recurring schedule. Tasks persist across restarts.
+
+## Parameters
+
+| Name | Type | Required | Description |
+|---|---|---|---|
+| `task` | string | ✓ | The prompt to run (e.g. "summarize open PRs and send_message the results") |
+| `schedule_str` | string | ✓ | Human-readable schedule (see examples below) |
+
+## Schedule examples
+
+| `schedule_str` | When it runs |
+|---|---|
+| `"every 30 minutes"` | Every 30 minutes |
+| `"every 2 hours"` | Every 2 hours |
+| `"every day at 9am"` | Daily at 9:00 AM (server timezone) |
+| `"every Monday at 8am"` | Every Monday at 8:00 AM |
+| `"every weekday at 6pm"` | Mon–Fri at 6:00 PM |
+
+## Example
+
+```
+scheduler_add(
+  task="List open GitHub PRs older than 2 days and send_message a summary",
+  schedule_str="every day at 9am"
+)
+```
+
+## Notes
+
+- The task prompt runs as a full Claude session — it can use any tool the agent has access to.
+- Use `send_message` in the task prompt to push results to you proactively.
+- Use `scheduler_list` to see task IDs, then `scheduler_remove` to cancel.

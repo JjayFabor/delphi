@@ -1,0 +1,30 @@
+---
+title: connector_add
+description: Install a connector with credentials.
+---
+
+Installs an MCP connector and restarts the bot. The connector's tools become available in the next session.
+
+## Parameters
+
+| Name | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | ✓ | Connector name (e.g. `github`, `hubspot`) |
+| `credentials` | object | ✓ | Key-value pairs of required credentials |
+
+## Example
+
+```
+connector_add(
+  name="github",
+  credentials={"GITHUB_TOKEN": "ghp_xxxxxxxxxxxxxxxxxxxx"}
+)
+```
+
+<Warning>The bot restarts immediately after this call. Expect a 5–10 second offline period. This is normal.</Warning>
+
+## Notes
+
+- Get the required credential names from `connector_info` first.
+- Credentials are stored encrypted in the database, not in `.env`.
+- To remove a connector, tell the agent: "remove the GitHub connector."

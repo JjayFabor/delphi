@@ -1,0 +1,28 @@
+---
+title: subagent_run
+description: Delegate a task to a sub-agent.
+---
+
+Runs a task using a defined sub-agent and returns the result. The main agent waits for completion and incorporates the result into its response.
+
+## Parameters
+
+| Name | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | ✓ | Sub-agent name (from `subagent_list`) |
+| `task` | string | ✓ | The task to perform |
+
+## Example
+
+```
+subagent_run(
+  name="researcher",
+  task="Find everything published about the Claude Agent SDK in the last 30 days. Include publication dates and source URLs."
+)
+```
+
+## Notes
+
+- The task is the only context the sub-agent receives (plus its system prompt). Make it self-contained.
+- Sub-agents run synchronously — the main agent waits for the result before continuing.
+- For long tasks, the typing indicator remains active while the sub-agent works.

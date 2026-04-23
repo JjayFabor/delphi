@@ -1,0 +1,29 @@
+---
+title: Bash
+description: Run shell commands in the agent's environment.
+---
+
+Runs a shell command and returns stdout, stderr, and exit code.
+
+## Parameters
+
+| Name | Type | Required | Description |
+|---|---|---|---|
+| `command` | string | ✓ | The shell command to run |
+| `timeout` | number | — | Timeout in milliseconds (default: 120000) |
+| `description` | string | — | Human-readable label shown in the UI |
+
+## Example
+
+```json
+{
+  "command": "git status",
+  "timeout": 10000
+}
+```
+
+## Notes
+
+- Claudhaus runs with `bypassPermissions` mode — the agent can execute commands without per-action prompts. Only run Claudhaus on machines you control.
+- Long-running commands (builds, tests) should set an appropriate `timeout`.
+- The agent confirms before destructive operations by default (configured in CLAUDE.md).

@@ -1,0 +1,72 @@
+---
+title: skill_list / read / write / delete
+description: Manage skills programmatically.
+---
+
+Four tools for reading and managing the agent's skill files.
+
+---
+
+## skill_list
+
+Returns all skills with metadata.
+
+**Parameters:** None.
+
+**Returns:** List of skills with `name`, `preview` (first line), `always` (boolean), `triggers` (array).
+
+```
+skill_list()
+# → morning-report  (trigger: morning report, standup)
+# → code-review     (always: true)
+```
+
+---
+
+## skill_read
+
+Returns the full content of a skill file.
+
+| Name | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | ✓ | Skill slug (from `skill_list`) |
+
+```
+skill_read(name="morning-report")
+# → Returns the full Markdown content of the skill
+```
+
+---
+
+## skill_write
+
+Creates or overwrites a skill file. Takes effect immediately — no restart needed.
+
+| Name | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | ✓ | Skill slug (e.g. `morning-report`) |
+| `content` | string | ✓ | Full Markdown content of the skill |
+
+```
+skill_write(
+  name="morning-report",
+  content="---\nalways: false\ntriggers: [morning report, standup]\n---\n\n# Morning Report\n..."
+)
+```
+
+---
+
+## skill_delete
+
+Removes a skill file.
+
+| Name | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | ✓ | Skill slug to delete |
+
+**Returns:** `true` if deleted, `false` if not found.
+
+```
+skill_delete(name="morning-report")
+# → true
+```

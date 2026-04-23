@@ -1,0 +1,42 @@
+---
+title: shared (pull)
+description: Retrieve context shared with you.
+---
+
+Displays all context that other users have shared with you, and injects it into your current Claude session.
+
+## Usage
+
+```
+/shared
+show shared context
+what did Jay share with me?
+anything shared from the team?
+```
+
+## How it works
+
+1. Queries `shared_context` where `to_chat_id` matches your chat, `revoked = 0`
+2. Groups results by sender, ordered by most recent first
+3. Displays in chat grouped by sender with timestamps
+4. Injects all items into the current Claude session
+5. Marks all displayed items as `acknowledged = 1`
+
+## Example output
+
+```
+📥 Shared with you:
+
+From Jay (2 items)
+• (Apr 22) use REST not GraphQL for the new endpoint
+• (Apr 21) staging DB password is in 1Password
+
+From Sarah (1 item)
+• (Apr 20) the client wants the dashboard by May 5
+```
+
+## Notes
+
+- Pull always shows all non-revoked items regardless of acknowledgment status.
+- Items are re-injected into Claude on every pull (in case you want to reference them again).
+- Push injection (on your next message after receiving a notification) is automatic and only happens once per item.

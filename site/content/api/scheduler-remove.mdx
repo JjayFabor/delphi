@@ -1,0 +1,27 @@
+---
+title: scheduler_remove
+description: Remove a recurring scheduled task.
+---
+
+Cancels a scheduled task by its ID. Get the ID from `scheduler_list`.
+
+## Parameters
+
+| Name | Type | Required | Description |
+|---|---|---|---|
+| `task_id` | string | ✓ | Task ID from `scheduler_list` |
+
+## Example
+
+```
+scheduler_list()
+# → ID: 7a3f  |  every day at 9am
+
+scheduler_remove(task_id="7a3f")
+# → Task 7a3f removed.
+```
+
+## Notes
+
+- One-shot tasks (`schedule_once`) expire automatically after running. Use this tool for recurring tasks only.
+- Removing a task is immediate — it won't run again even if the next run was imminent.

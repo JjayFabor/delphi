@@ -1,0 +1,40 @@
+---
+title: Glob / Grep
+description: Find files by pattern and search content.
+---
+
+## Glob
+
+Finds files matching a glob pattern, sorted by modification time.
+
+| Name | Type | Required | Description |
+|---|---|---|---|
+| `pattern` | string | ✓ | Glob pattern (e.g. `**/*.py`, `src/**/*.ts`) |
+| `path` | string | — | Directory to search in (default: current working directory) |
+
+```json
+{ "pattern": "**/*.mdx", "path": "/home/user/site/content" }
+```
+
+## Grep
+
+Searches file contents using ripgrep regex.
+
+| Name | Type | Required | Description |
+|---|---|---|---|
+| `pattern` | string | ✓ | Regex pattern to search for |
+| `path` | string | — | File or directory to search |
+| `glob` | string | — | Glob filter (e.g. `*.py`) |
+| `type` | string | — | File type (e.g. `py`, `ts`, `go`) |
+| `output_mode` | string | — | `files_with_matches` (default), `content`, or `count` |
+| `context` | number | — | Lines of context around each match |
+
+```json
+{
+  "pattern": "scheduler_add",
+  "path": "/home/user/claudhaus/agents",
+  "type": "py",
+  "output_mode": "content",
+  "context": 3
+}
+```
