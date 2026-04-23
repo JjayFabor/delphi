@@ -113,6 +113,11 @@ ALLOWED_CHAT_IDS: set[int] = {
 
 TG_MAX_CHARS = 4000
 
+# Max seconds to wait for a Claude response before killing the subprocess.
+# Prevents the bot from freezing indefinitely on a stuck Claude process.
+# Override with CLAUDE_TIMEOUT_SECONDS in .env (default: 5 minutes).
+CLAUDE_TIMEOUT = int(os.getenv("CLAUDE_TIMEOUT_SECONDS", "300"))
+
 # ── Tool allowlist ─────────────────────────────────────────────────────────────
 # MAIN_EXTRA_TOOLS in .env: comma-separated tool names to add on top of base set.
 # Set to "*" to allow every tool (all MCP connectors, no restriction).
@@ -1245,22 +1250,30 @@ async def stream_claude(prompt: str, chat_id: int, silent: bool = False):
     reply_parts: list[str] = []
 
     try:
-        async for event in sdk.query(prompt=prompt, options=options):
-            if isinstance(event, sdk.AssistantMessage):
-                msg_text = "".join(
-                    block.text for block in event.content
-                    if isinstance(block, sdk.TextBlock)
-                )
-                if msg_text.strip():
-                    reply_parts.append(msg_text)
-                    yield msg_text
-                if event.session_id:
-                    new_session_id = event.session_id
-            elif isinstance(event, sdk.ResultMessage):
-                if event.session_id:
-                    new_session_id = event.session_id
-                if event.usage:
-                    _log_usage(chat_id, event.usage, event.total_cost_usd)
+        async with asyncio.timeout(CLAUDE_TIMEOUT):
+            async for event in sdk.query(prompt=prompt, options=options):
+                if isinstance(event, sdk.AssistantMessage):
+                    msg_text = "".join(
+                        block.text for block in event.content
+                        if isinstance(block, sdk.TextBlock)
+                    )
+                    if msg_text.strip():
+                        reply_parts.append(msg_text)
+                        yield msg_text
+                    if event.session_id:
+                        new_session_id = event.session_id
+                elif isinstance(event, sdk.ResultMessage):
+                    if event.session_id:
+                        new_session_id = event.session_id
+                    if event.usage:
+                        _log_usage(chat_id, event.usage, event.total_cost_usd)
+    except TimeoutError:
+        logger.error(
+            "Claude query timed out after %ds for chat %d — subprocess killed",
+            CLAUDE_TIMEOUT, chat_id,
+        )
+        yield f"⏱ Request timed out after {CLAUDE_TIMEOUT // 60} minutes. The process was killed. Try again or break your request into smaller steps."
+        return
     except sdk.CLINotFoundError:
         logger.error("claude CLI not found")
         yield "Error: claude CLI not found. Make sure `claude` is installed and authenticated."
