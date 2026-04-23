@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { Github } from 'lucide-react'
 import ThemeToggle from './ThemeToggle'
+import Search from './Search'
 
 export default function Nav() {
   return (
@@ -11,12 +12,8 @@ export default function Nav() {
         </Link>
 
         <nav className="hidden md:flex items-center gap-6 text-sm text-text-muted">
-          <Link href="/docs" className="hover:text-text-primary transition-colors">
-            Docs
-          </Link>
-          <Link href="/api-reference" className="hover:text-text-primary transition-colors">
-            API Reference
-          </Link>
+          <Link href="/docs" className="hover:text-text-primary transition-colors">Docs</Link>
+          <Link href="/api-reference" className="hover:text-text-primary transition-colors">API Reference</Link>
           <a
             href="https://github.com/JjayFabor/claudhaus"
             target="_blank"
@@ -29,6 +26,7 @@ export default function Nav() {
         </nav>
 
         <div className="flex items-center gap-2">
+          <Search />
           <ThemeToggle />
           <Link
             href="/docs/introduction"
