@@ -31,10 +31,11 @@ export const mdxComponents: Record<string, React.ComponentType<any>> = {
       {children}
     </code>
   ),
-  a: ({ href, children }: React.HTMLProps<HTMLAnchorElement>) => (
+  a: ({ href, children, ...props }: React.HTMLProps<HTMLAnchorElement>) => (
     <a
       href={href}
       className="text-accent hover:text-accent-hover underline underline-offset-2 transition-colors"
+      {...props}
     >
       {children}
     </a>
@@ -78,7 +79,7 @@ export const mdxComponents: Record<string, React.ComponentType<any>> = {
     <th className="px-4 py-2.5 text-left font-semibold text-text-muted">{children}</th>
   ),
   td: ({ children }: { children: React.ReactNode }) => (
-    <td className="px-4 py-2.5 text-text-primary border-b border-border last-row:border-0">{children}</td>
+    <td className="px-4 py-2.5 text-text-primary border-b border-border last:border-0">{children}</td>
   ),
   tr: ({ children }: { children: React.ReactNode }) => (
     <tr className="border-b border-border last:border-0 hover:bg-surface/50 transition-colors">{children}</tr>
