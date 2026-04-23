@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 140" width="100%" height="100%">
+    <defs>
+        <linearGradient id="eyeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#0ea5e9"/>
+            <stop offset="100%" stop-color="#4f46e5"/>
+        </linearGradient>
+        <style>
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&amp;display=swap');
+            .title { font-family: 'Inter', system-ui, sans-serif; font-weight: 800; font-size: 46px; fill: #0f172a; letter-spacing: -1px; }
+            .subtitle { font-family: 'Inter', system-ui, sans-serif; font-weight: 600; font-size: 13px; fill: #64748b; letter-spacing: 2px; }
+            .tagline { font-family: 'Inter', system-ui, sans-serif; font-weight: 400; font-size: 13px; fill: #94a3b8; }
+            @media (prefers-color-scheme: dark) {
+                .title { fill: #f1f5f9; }
+                .subtitle { fill: #94a3b8; }
+                .tagline { fill: #64748b; }
+            }
+        </style>
+    </defs>
+
+    <!-- Mark (transparent background) -->
+    <g transform="translate(15, 20)">
+        <path d="M 12 50 C 29 17 71 17 88 50 C 71 83 29 83 12 50 Z" stroke="url(#eyeGrad)" stroke-width="7" fill="none" stroke-linejoin="round"/>
+        <path d="M 22 66 L 13 85 L 36 74" fill="url(#eyeGrad)"/>
+        <path d="M 50 32 L 58 50 L 50 68 L 42 50 Z" fill="#38bdf8"/>
+        <circle cx="12" cy="50" r="4" fill="#0ea5e9"/>
+        <circle cx="88" cy="50" r="4" fill="#4f46e5"/>
+        <circle cx="50" cy="28" r="4" fill="#0ea5e9"/>
+        <circle cx="50" cy="72" r="4" fill="#4f46e5"/>
+        <circle cx="50" cy="50" r="3.5" fill="url(#eyeGrad)"/>
+    </g>
+
+    <!-- Wordmark -->
+    <g transform="translate(140, 65)">
+        <text x="0" y="0" class="title">DELPHI</text>
+        <text x="3" y="28" class="subtitle">SELF-HOSTED · PERSONAL AI</text>
+        <text x="3" y="50" class="tagline">The oracle in your pocket. Smarter every conversation.</text>
+    </g>
+</svg>

@@ -1,6 +1,6 @@
 ---
 title: Docker Setup
-description: Running Claudhaus in a Docker container.
+description: Running Delphi in a Docker container.
 ---
 
 ## Start the container
@@ -11,7 +11,7 @@ docker compose up -d
 
 ## Critical: the `~/.claude` volume mount
 
-Claudhaus authenticates via the Claude CLI (`~/.claude/.credentials.json`). The `docker-compose.yml` mounts your local `~/.claude` directory into the container. Without this mount, the CLI cannot authenticate and the bot will not start.
+Delphi authenticates via the Claude CLI (`~/.claude/.credentials.json`). The `docker-compose.yml` mounts your local `~/.claude` directory into the container. Without this mount, the CLI cannot authenticate and the bot will not start.
 
 <Danger>Do not remove the `~/.claude` volume mount from `docker-compose.yml`. The bot will fail to start without Claude CLI credentials.</Danger>
 

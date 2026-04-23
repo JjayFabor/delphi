@@ -1,6 +1,6 @@
 ---
 title: Configuration
-description: Environment variables reference for Claudhaus.
+description: Environment variables reference for Delphi.
 ---
 
 All configuration lives in `.env` in the project root. Copy `.env.example` to get started — the setup wizard does this automatically.
@@ -12,6 +12,8 @@ All configuration lives in `.env` in the project root. Copy `.env.example` to ge
 | `TELEGRAM_BOT_TOKEN` | — | Your bot token from [@BotFather](https://t.me/BotFather) |
 | `TELEGRAM_ALLOWED_USER_IDS` | — | Comma-separated Telegram user IDs who can use the bot |
 | `TELEGRAM_ALLOWED_CHAT_IDS` | — | Group/channel IDs (if empty, DMs only) |
+
+<Warning>Only add Telegram user IDs belonging to yourself or your household. Granting access to colleagues, clients, or anyone outside your household means your personal Claude subscription is processing third-party requests — a violation of Anthropic's terms of service.</Warning>
 
 ## Agent behavior
 

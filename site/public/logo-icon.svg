@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="100%" height="100%">
+    <defs>
+        <linearGradient id="eyeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#0ea5e9"/>
+            <stop offset="100%" stop-color="#4f46e5"/>
+        </linearGradient>
+    </defs>
+
+    <!-- Eye lens outline -->
+    <path d="M 15 60 C 35 20 85 20 105 60 C 85 100 35 100 15 60 Z" stroke="url(#eyeGrad)" stroke-width="8" fill="none" stroke-linejoin="round"/>
+
+    <!-- Corner tail mark -->
+    <path d="M 27 79 L 16 102 L 44 89" fill="url(#eyeGrad)"/>
+
+    <!-- Diamond pupil -->
+    <path d="M 60 38 L 70 60 L 60 82 L 50 60 Z" fill="#38bdf8"/>
+
+    <!-- Cardinal node dots — use gradient color so they're visible on any background -->
+    <circle cx="15" cy="60" r="5" fill="#0ea5e9"/>
+    <circle cx="105" cy="60" r="5" fill="#4f46e5"/>
+    <circle cx="60" cy="33" r="5" fill="#0ea5e9"/>
+    <circle cx="60" cy="87" r="5" fill="#4f46e5"/>
+
+    <!-- Center iris -->
+    <circle cx="60" cy="60" r="4" fill="url(#eyeGrad)"/>
+</svg>

@@ -1,0 +1,67 @@
+---
+title: Connecting Discord
+description: Create a Discord bot and connect it to Delphi alongside Telegram.
+---
+
+Discord runs alongside Telegram — both interfaces connect to the same agent. You can use either or both at the same time.
+
+## 1. Create a Discord application
+
+Go to the [Discord Developer Portal](https://discord.com/developers/applications) and click **New Application**. Give it a name (e.g. "Delphi").
+
+## 2. Create a bot user
+
+In the left sidebar, click **Bot**. Then:
+
+1. Click **Add Bot** → confirm
+2. Under **Token**, click **Reset Token** and copy the token — you won't see it again
+3. Disable **Public Bot** so only you can add it to servers
+4. Enable **Message Content Intent** under Privileged Gateway Intents
+
+## 3. Add the token to `.env`
+
+```bash
+DISCORD_BOT_TOKEN=your-bot-token-here
+```
+
+## 4. Invite the bot to your server
+
+In the Developer Portal, go to **OAuth2 → URL Generator**:
+
+- Scopes: `bot`
+- Bot Permissions: `Send Messages`, `Read Message History`, `View Channels`
+
+Copy the generated URL, open it in your browser, and add the bot to your personal server.
+
+## 5. Start the bot
+
+```bash
+source .venv/bin/activate
+python agents/main/agent.py
+```
+
+## 6. Find your Discord user ID
+
+Enable Developer Mode in Discord (**Settings → Advanced → Developer Mode**). Right-click your username anywhere and select **Copy User ID**.
+
+Add it to `.env`:
+
+```bash
+DISCORD_ALLOWED_USER_IDS=123456789012345678
+```
+
+Optionally restrict to specific servers:
+
+```bash
+DISCORD_ALLOWED_GUILD_IDS=987654321098765432
+```
+
+Restart the bot.
+
+## 7. Test it
+
+Mention the bot in a channel or send it a DM. It should respond within a few seconds.
+
+<Note>If `DISCORD_ALLOWED_USER_IDS` is empty, any user in an allowed server can interact with the bot. Set it to your own ID to keep it personal.</Note>
+
+<Warning>Only add your own Discord user ID. Granting access to others means your personal Claude subscription processes their requests, which violates Anthropic's terms of service.</Warning>

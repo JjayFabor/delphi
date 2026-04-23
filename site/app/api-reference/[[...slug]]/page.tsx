@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation'
 import { compileMDX } from 'next-mdx-remote/rsc'
+import remarkGfm from 'remark-gfm'
 import { getAllSlugs, getDocMeta } from '@/lib/mdx'
 import { mdxComponents } from '@/components/MdxComponents'
 import Toc from '@/components/Toc'
@@ -33,6 +34,7 @@ export default async function ApiReferencePage({ params }: Props) {
   const { content } = await compileMDX({
     source: meta.rawContent,
     components: mdxComponents as any,
+    options: { mdxOptions: { remarkPlugins: [remarkGfm] } },
   })
 
   return (

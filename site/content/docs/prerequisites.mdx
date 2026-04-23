@@ -1,6 +1,6 @@
 ---
 title: Prerequisites
-description: What you need installed before running Claudhaus.
+description: What you need installed before running Delphi.
 ---
 
 ## Required
@@ -13,7 +13,11 @@ description: What you need installed before running Claudhaus.
 | git | Any | For cloning the repo |
 | Telegram account | — | To create a bot via BotFather |
 
-<Warning>Do not set `ANTHROPIC_API_KEY`. Claudhaus authenticates via your Claude Code subscription (`~/.claude/.credentials.json`). Setting that env var switches billing from your subscription to metered API calls.</Warning>
+<Warning>
+**Personal use only.** Delphi runs under your personal Claude Code subscription and is intended solely for your own use. Do not expose it to clients, customers, or third parties — processing other people's requests through your personal subscription violates Anthropic's terms of service. If you need a multi-user or commercial setup, obtain an Anthropic API key and operate under Anthropic's Commercial Terms instead.
+</Warning>
+
+<Note>Do not set `ANTHROPIC_API_KEY` unless you intend to switch to metered API billing. By default, Delphi authenticates via your Claude Code subscription (`~/.claude/.credentials.json`). Setting that variable bypasses the subscription and charges per token against your API account.</Note>
 
 ## Verify your environment
 

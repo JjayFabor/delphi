@@ -9,8 +9,12 @@ const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
 const jetbrains = JetBrains_Mono({ subsets: ['latin'], variable: '--font-jetbrains' })
 
 export const metadata: Metadata = {
-  title: { default: 'Claudhaus', template: '%s | Claudhaus' },
-  description: 'Your personal AI agent. Self-hosted. Claude-native.',
+  title: { default: 'Delphi', template: '%s | Delphi' },
+  description: 'Your personal AI agent. Self-hosted. Built on the Claude Agent SDK.',
+  icons: {
+    icon: [{ url: '/logo-icon.svg', type: 'image/svg+xml' }],
+    apple: '/logo-icon.svg',
+  },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

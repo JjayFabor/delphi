@@ -32,6 +32,7 @@ export const docsNav: NavSection[] = [
     title: 'Guides',
     items: [
       { title: 'Connecting Telegram',  slug: 'guides/connecting-telegram' },
+      { title: 'Connecting Discord',   slug: 'guides/connecting-discord' },
       { title: 'Adding a Connector',   slug: 'guides/adding-a-connector' },
       { title: 'Writing a Skill',      slug: 'guides/writing-a-skill' },
       { title: 'WSL2 Setup',           slug: 'guides/wsl2-setup' },
