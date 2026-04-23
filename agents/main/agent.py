@@ -55,6 +55,7 @@ from agents.main.connectors import (
 from agents.main import skills as _skills_mod
 from agents.main import media as _media_mod
 from agents.main import discord_bot as _discord_mod
+from agents.main import google_chat_bot as _google_chat_mod
 from agents.main import self_edit as _self_edit_mod
 from agents.main.subagents import list_subagents, create_subagent, run_subagent
 from agents.main.scheduler import (
@@ -1943,6 +1944,23 @@ def main() -> None:
                 _discord_mod.start_discord(discord_token, run_claude, discord_user_ids, discord_guild_ids)
             )
             logger.info("Discord bot task started")
+
+        # Start Google Chat bot if configured
+        gc_creds_path = os.getenv("GOOGLE_CHAT_CREDENTIALS_PATH", "").strip()
+        gc_project_id = os.getenv("GOOGLE_CLOUD_PROJECT_ID", "").strip()
+        gc_subscription_id = os.getenv("GOOGLE_CHAT_SUBSCRIPTION_ID", "").strip()
+        if gc_creds_path and gc_project_id and gc_subscription_id:
+            _raw_gc_emails = os.getenv("GOOGLE_CHAT_ALLOWED_EMAILS", "")
+            gc_allowed_emails: set[str] = {
+                e.strip() for e in _raw_gc_emails.split(",") if e.strip()
+            }
+            asyncio.create_task(
+                _google_chat_mod.start_google_chat(
+                    gc_creds_path, gc_project_id, gc_subscription_id,
+                    run_claude, gc_allowed_emails,
+                )
+            )
+            logger.info("Google Chat bot task started")
 
     _app = app = (
         Application.builder()

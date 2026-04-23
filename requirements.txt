@@ -26,3 +26,9 @@ openai>=1.0,<2
 
 # ── Discord channel (Phase 8) ─────────────────────────────────────────────────
 discord.py>=2.3,<3
+
+# ── Google Chat channel ────────────────────────────────────────────────────────
+# Optional — install to enable Google Chat transport.
+# See agents/main/google_chat_bot.py for full setup instructions.
+google-cloud-pubsub>=2.21,<3
+google-auth>=2.29,<3
