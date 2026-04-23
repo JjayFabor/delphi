@@ -1,4 +1,4 @@
-import { notFound, redirect } from 'next/navigation'
+import { notFound } from 'next/navigation'
 import { compileMDX } from 'next-mdx-remote/rsc'
 import { getAllSlugs, getDocMeta } from '@/lib/mdx'
 import { mdxComponents } from '@/components/MdxComponents'
@@ -11,11 +11,11 @@ interface Props {
 
 export async function generateStaticParams() {
   const slugs = getAllSlugs('api')
-  return [{ slug: undefined }, ...slugs.map(s => ({ slug: s }))]
+  return [{ slug: [] as string[] }, ...slugs.map(s => ({ slug: s }))]
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const slug = params.slug ?? ['overview']
+  const slug = (!params.slug || params.slug.length === 0) ? ['overview'] : params.slug
   const meta = getDocMeta('api', slug)
   if (!meta) return {}
   return {
@@ -25,9 +25,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export default async function ApiReferencePage({ params }: Props) {
-  if (!params.slug) redirect('/api-reference/overview')
+  const slug = (!params.slug || params.slug.length === 0) ? ['overview'] : params.slug
 
-  const meta = getDocMeta('api', params.slug)
+  const meta = getDocMeta('api', slug)
   if (!meta) notFound()
 
   const { content } = await compileMDX({

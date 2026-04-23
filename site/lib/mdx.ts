@@ -6,7 +6,7 @@ const CONTENT_ROOT = path.join(process.cwd(), 'content')
 
 export interface DocFrontmatter {
   title: string
-  description: string
+  description?: string
 }
 
 export interface Heading {
