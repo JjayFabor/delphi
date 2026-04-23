@@ -10,11 +10,11 @@ export default function Toc({ headings }: { headings: Heading[] }) {
 
     const observer = new IntersectionObserver(
       entries => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            setActive(entry.target.id)
-            break
-          }
+        const intersecting = entries
+          .filter(e => e.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)
+        if (intersecting.length > 0) {
+          setActive(intersecting[0].target.id)
         }
       },
       { rootMargin: '-80px 0px -60% 0px' }
@@ -31,7 +31,7 @@ export default function Toc({ headings }: { headings: Heading[] }) {
   if (headings.length === 0) return null
 
   return (
-    <aside className="w-52 flex-shrink-0 hidden xl:block">
+    <aside aria-label="On this page" className="w-52 flex-shrink-0 hidden xl:block">
       <p className="text-[11px] font-semibold uppercase tracking-widest text-text-muted mb-3">
         On this page
       </p>
