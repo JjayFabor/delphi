@@ -1885,6 +1885,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             _mcp_ready_event.set()
 
     chat_id = update.effective_chat.id
+
+    # Reject new messages while Claude is already processing for this chat
+    if chat_id in _active_tasks and not _active_tasks[chat_id].done():
+        await update.message.reply_text("⏳ Still processing your previous message. Send /stop to cancel it first.")
+        return
+
     _track_task(chat_id)
     user_text = update.message.text
     db_log(chat_id, "user", user_text)
@@ -2009,6 +2015,7 @@ def main() -> None:
     _app = app = (
         Application.builder()
         .token(BOT_TOKEN)
+        .concurrent_updates(True)
         .post_init(_post_init)
         .build()
     )
