@@ -1213,7 +1213,7 @@ async def run_claude(prompt: str, chat_id: int, silent: bool = False) -> str:
     return reply or "(no response)"
 
 
-async def stream_claude(prompt: str, chat_id: int, silent: bool = False):
+async def stream_claude(prompt: str, chat_id: int, silent: bool = False, _attempt: int = 0):
     """
     Async generator — yields each assistant text block as Claude produces it.
     Use in interactive handlers for progressive Telegram delivery.
@@ -1285,6 +1285,15 @@ async def stream_claude(prompt: str, chat_id: int, silent: bool = False):
         yield "Connection error — session reset. Please try again."
         return
     except Exception as e:
+        if "Control request timeout: initialize" in str(e) and _attempt == 0:
+            logger.warning(
+                "Initialize timeout for chat %d — resetting session and retrying",
+                chat_id,
+            )
+            db_delete_session(chat_id)
+            async for text in stream_claude(prompt, chat_id, silent=silent, _attempt=1):
+                yield text
+            return
         logger.exception("Unexpected error from Claude: %s", e)
         yield f"Error: {e}"
         return
