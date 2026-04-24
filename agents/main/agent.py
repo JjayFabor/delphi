@@ -26,6 +26,7 @@ _mcp_ready_event: Optional[asyncio.Event] = None
 _MCP_PROBE_TIMEOUT = 60  # seconds to wait for MCP init before giving up
 _current_chat_id: contextvars.ContextVar[int] = contextvars.ContextVar("current_chat_id", default=0)
 _app: Optional["Application"] = None  # set after Application.build(); used by scheduler tools
+_active_tasks: dict[int, asyncio.Task] = {}  # chat_id → running handler task
 
 from dotenv import load_dotenv
 from telegram import Update
@@ -1590,6 +1591,28 @@ async def cmd_shared(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     await _handle_pull(update, context)
 
 
+async def cmd_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.message or not is_allowed(update):
+        return
+    chat_id = update.effective_chat.id
+    task = _active_tasks.get(chat_id)
+    if task and not task.done():
+        task.cancel()
+        await update.message.reply_text("⛔ Cancelled.")
+    else:
+        await update.message.reply_text("Nothing is running right now.")
+
+
+def _track_task(chat_id: int) -> None:
+    t = asyncio.current_task()
+    if t:
+        _active_tasks[chat_id] = t
+
+
+def _untrack_task(chat_id: int) -> None:
+    _active_tasks.pop(chat_id, None)
+
+
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message or not update.message.photo:
         return
@@ -1605,6 +1628,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             _mcp_ready_event.set()
 
     chat_id = update.effective_chat.id
+    _track_task(chat_id)
     photo = update.message.photo[-1]  # highest resolution
     caption = update.message.caption or ""
 
@@ -1632,8 +1656,11 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                 except Exception:
                     await update.message.reply_text(chunk)
             typing_task = asyncio.create_task(_keep_typing(context, chat_id))
+    except asyncio.CancelledError:
+        pass
     finally:
         typing_task.cancel()
+        _untrack_task(chat_id)
 
     if _restart_requested:
         await asyncio.sleep(1)
@@ -1658,6 +1685,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             _mcp_ready_event.set()
 
     chat_id = update.effective_chat.id
+    _track_task(chat_id)
     await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
 
     transcript = await _media_mod.transcribe_voice(context.bot, voice.file_id)
@@ -1676,8 +1704,11 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                 except Exception:
                     await update.message.reply_text(chunk)
             typing_task = asyncio.create_task(_keep_typing(context, chat_id))
+    except asyncio.CancelledError:
+        pass
     finally:
         typing_task.cancel()
+        _untrack_task(chat_id)
 
     if _restart_requested:
         await asyncio.sleep(1)
@@ -1699,6 +1730,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             _mcp_ready_event.set()
 
     chat_id = update.effective_chat.id
+    _track_task(chat_id)
     doc = update.message.document
     filename = doc.file_name or f"file_{doc.file_id[:12]}"
     caption = update.message.caption or ""
@@ -1739,8 +1771,11 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 except Exception:
                     await update.message.reply_text(chunk)
             typing_task = asyncio.create_task(_keep_typing(context, chat_id))
+    except asyncio.CancelledError:
+        pass
     finally:
         typing_task.cancel()
+        _untrack_task(chat_id)
 
     if _restart_requested:
         await asyncio.sleep(1)
@@ -1841,12 +1876,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             _mcp_ready_event.set()
 
     chat_id = update.effective_chat.id
+    _track_task(chat_id)
     user_text = update.message.text
     db_log(chat_id, "user", user_text)
     _flush_mgr.record(chat_id, user_text)
 
     # Handle pull requests before passing to Claude
     if _is_pull_request(user_text):
+        _untrack_task(chat_id)
         await _handle_pull(update, context)
         return
 
@@ -1870,8 +1907,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                     await update.message.reply_text(chunk)
 
             typing_task = asyncio.create_task(_keep_typing(context, chat_id))
+    except asyncio.CancelledError:
+        pass
     finally:
         typing_task.cancel()
+        _untrack_task(chat_id)
 
     if _restart_requested:
         await asyncio.sleep(1)
@@ -1968,6 +2008,8 @@ def main() -> None:
     app.add_handler(CommandHandler("reset", cmd_reset))
     app.add_handler(CommandHandler("status", cmd_status))
     app.add_handler(CommandHandler("restart", cmd_restart))
+    app.add_handler(CommandHandler("cancel", cmd_cancel))
+    app.add_handler(CommandHandler("stop", cmd_cancel))
     app.add_handler(CommandHandler("share", cmd_share))
     app.add_handler(CommandHandler("revoke", cmd_revoke))
     app.add_handler(CommandHandler("shared", cmd_shared))
