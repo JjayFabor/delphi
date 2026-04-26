@@ -126,6 +126,7 @@ _BASE_TOOLS = [
     "Bash", "Read", "Write", "Edit", "Glob", "Grep",
     "WebSearch", "WebFetch", "TodoWrite",
     "memory_search", "memory_write_long_term", "memory_write_daily", "memory_read_file",
+    "wiki_write", "wiki_read", "wiki_list",
     "connector_list", "connector_add", "connector_remove", "connector_info",
     "skill_list", "skill_read", "skill_write", "skill_delete",
     "subagent_list", "subagent_create", "subagent_run",
@@ -231,6 +232,65 @@ async def tool_memory_read_file(args: dict) -> dict:
         return {"content": [{"type": "text", "text": f"{path_arg} does not exist yet."}]}
     text = target.read_text(encoding="utf-8")
     return {"content": [{"type": "text", "text": text or "(empty)"}]}
+
+
+# ── Wiki tools ────────────────────────────────────────────────────────────────
+
+@sdk.tool(
+    name="wiki_write",
+    description=(
+        "Create or overwrite a wiki page. Use path as a slash-separated topic slug "
+        "like 'database/schema' or 'hubspot/properties'. Content should be clean markdown. "
+        "Call this to file knowledge discovered during a conversation so it persists for future sessions."
+    ),
+    input_schema={"path": str, "content": str},
+)
+async def tool_wiki_write(args: dict) -> dict:
+    path_arg = args.get("path", "").strip().strip("/")
+    content = args.get("content", "").strip()
+    if not path_arg:
+        return {"content": [{"type": "text", "text": "Error: path is required."}], "is_error": True}
+    if not content:
+        return {"content": [{"type": "text", "text": "Error: content is empty."}], "is_error": True}
+    target = WORKSPACE / "wiki" / (path_arg if path_arg.endswith(".md") else f"{path_arg}.md")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(content, encoding="utf-8")
+    if _mem_index:
+        _mem_index.reindex_file(target)
+    logger.info("wiki_write: wrote %s (%d chars)", target.relative_to(WORKSPACE), len(content))
+    return {"content": [{"type": "text", "text": f"Wiki page written: wiki/{path_arg}.md"}]}
+
+
+@sdk.tool(
+    name="wiki_read",
+    description="Read a wiki page in full by its path slug (e.g. 'database/schema' or 'hubspot/properties').",
+    input_schema={"path": str},
+)
+async def tool_wiki_read(args: dict) -> dict:
+    path_arg = args.get("path", "").strip().strip("/")
+    if not path_arg:
+        return {"content": [{"type": "text", "text": "Error: path is required."}], "is_error": True}
+    target = WORKSPACE / "wiki" / (path_arg if path_arg.endswith(".md") else f"{path_arg}.md")
+    if not target.exists():
+        return {"content": [{"type": "text", "text": f"Wiki page not found: wiki/{path_arg}.md"}]}
+    text = target.read_text(encoding="utf-8")
+    return {"content": [{"type": "text", "text": text or "(empty)"}]}
+
+
+@sdk.tool(
+    name="wiki_list",
+    description="List all wiki pages. Returns a tree of topic paths.",
+    input_schema={},
+)
+async def tool_wiki_list(_args: dict) -> dict:
+    wiki_dir = WORKSPACE / "wiki"
+    if not wiki_dir.exists() or not any(wiki_dir.rglob("*.md")):
+        return {"content": [{"type": "text", "text": "Wiki is empty. Use wiki_write to add pages."}]}
+    pages = sorted(
+        str(p.relative_to(wiki_dir).with_suffix(""))
+        for p in wiki_dir.rglob("*.md")
+    )
+    return {"content": [{"type": "text", "text": "\n".join(pages)}]}
 
 
 # ── Connector tools ───────────────────────────────────────────────────────────
@@ -797,6 +857,7 @@ _memory_mcp = sdk.create_sdk_mcp_server(
     name="memory",
     tools=[
         tool_memory_search, tool_memory_write_long_term, tool_memory_write_daily, tool_memory_read_file,
+        tool_wiki_write, tool_wiki_read, tool_wiki_list,
         tool_connector_list, tool_connector_add, tool_connector_remove, tool_connector_info,
         tool_skill_list, tool_skill_read, tool_skill_write, tool_skill_delete,
         tool_subagent_list, tool_subagent_create, tool_subagent_run,
@@ -1963,6 +2024,7 @@ def main() -> None:
     WORKSPACE.mkdir(parents=True, exist_ok=True)
     (WORKSPACE / "memory").mkdir(exist_ok=True)
     (WORKSPACE / "sessions").mkdir(exist_ok=True)
+    (WORKSPACE / "wiki").mkdir(exist_ok=True)
 
     # Seed memory files so they always exist for appending
     for seed in [WORKSPACE / "MEMORY.md", WORKSPACE / "DREAMS.md"]:

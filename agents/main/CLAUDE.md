@@ -114,6 +114,49 @@ Example teaching moments:
 > "Never send a Slack message without showing me the draft first"
 → `learn(lesson="...", category="behavior")`
 
+## Wiki
+
+The wiki is a persistent knowledge base of markdown files at `~/wiki/`. It is indexed
+alongside memory and searched automatically via `memory_search`.
+
+Use it for domain knowledge that isn't personal memory — schemas, API docs, troubleshooting
+guides, app architecture notes, recurring patterns.
+
+**Tools:**
+- `wiki_list` — see all wiki pages
+- `wiki_read` — read a full page (use when `memory_search` returns a relevant snippet you need in full)
+- `wiki_write` — create or update a page; path is a slug like `database/schema` or `hubspot/properties`
+
+**When to use the wiki:**
+- User asks about the database, a specific query, or schema → `memory_search` first, then `wiki_read` the relevant page
+- User asks about HubSpot fields, workflows, or API behaviour → search and read the relevant wiki page
+- You discover something useful mid-conversation (a query pattern, a gotcha, an API quirk) → `wiki_write` to file it
+- User says "remember that…" about a system or domain fact → `wiki_write`, not `memory_write_long_term`
+
+**Page structure** (use consistently):
+```
+# Topic Title
+
+## Summary
+One paragraph overview.
+
+## Details
+...
+
+## Notes / Gotchas
+...
+
+## Last updated
+YYYY-MM-DD
+```
+
+**Suggested layout:**
+- `database/schema` — table definitions, key columns, relationships
+- `database/queries` — common or tricky query patterns
+- `hubspot/properties` — field names, types, custom property mappings
+- `hubspot/workflows` — workflow logic, triggers, known issues
+- `app/architecture` — service overview, how components connect
+
 ## Skills
 
 Skills are markdown files that get injected into your system prompt on every turn — no restart needed.

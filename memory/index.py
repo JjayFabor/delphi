@@ -130,6 +130,12 @@ class MemoryIndex:
                         files.append(f)
                 except ValueError:
                     pass
+
+        wiki_dir = self.workspace / "wiki"
+        if wiki_dir.exists():
+            for f in sorted(wiki_dir.rglob("*.md")):
+                files.append(f)
+
         return files
 
     def _chunk_file(self, path: Path) -> list[Chunk]:
@@ -194,7 +200,7 @@ class MemoryIndex:
             return path.name
 
     def _watch_loop(self) -> None:
-        """Poll memory files for changes every 5 seconds."""
+        """Poll memory and wiki files for changes every 5 seconds."""
         mtimes: dict[Path, float] = {}
 
         while not self._stop_event.is_set():
@@ -204,7 +210,9 @@ class MemoryIndex:
                     if mtimes.get(path) != mtime:
                         if path in mtimes:
                             logger.debug("Memory file changed: %s", path.name)
-                            self.reindex_file(path)
+                        else:
+                            logger.debug("New wiki file detected: %s", path.name)
+                        self.reindex_file(path)
                         mtimes[path] = mtime
                 except Exception as e:
                     logger.warning("Watcher error for %s: %s", path, e)
