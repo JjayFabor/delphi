@@ -1263,6 +1263,23 @@ def chunk_text(text: str, max_len: int = TG_MAX_CHARS) -> list[str]:
 
 
 # ── Claude query ───────────────────────────────────────────────────────────────
+async def _warn_slow_request(chat_id: int, delay: float) -> None:
+    """Fire a heads-up message delay seconds into a long-running request."""
+    await asyncio.sleep(delay)
+    if not _app:
+        return
+    try:
+        remaining = CLAUDE_TIMEOUT - int(delay)
+        await _app.bot.send_message(
+            chat_id,
+            f"⏳ Still working... this is taking a while. "
+            f"If no response arrives in ~{remaining}s the request will be cancelled automatically. "
+            "For complex tasks, try breaking them into smaller steps.",
+        )
+    except Exception:
+        pass
+
+
 async def run_claude(prompt: str, chat_id: int, silent: bool = False) -> str:
     """Collect all streamed text blocks into one string. Use for non-interactive callers."""
     parts = []
@@ -1311,6 +1328,8 @@ async def stream_claude(prompt: str, chat_id: int, silent: bool = False, _attemp
     new_session_id: Optional[str] = None
     reply_parts: list[str] = []
 
+    _warn_delay = max(CLAUDE_TIMEOUT - 60, CLAUDE_TIMEOUT // 2)
+    _warn_task = asyncio.create_task(_warn_slow_request(chat_id, _warn_delay))
     try:
         async with asyncio.timeout(CLAUDE_TIMEOUT):
             async for event in sdk.query(prompt=prompt, options=options):
@@ -1358,6 +1377,8 @@ async def stream_claude(prompt: str, chat_id: int, silent: bool = False, _attemp
         logger.exception("Unexpected error from Claude: %s", e)
         yield f"Error: {e}"
         return
+    finally:
+        _warn_task.cancel()
 
     if new_session_id:
         db_save_session(chat_id, new_session_id)
