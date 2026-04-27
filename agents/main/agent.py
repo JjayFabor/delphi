@@ -1800,10 +1800,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             db_log(chat_id, "assistant", text)
             _flush_mgr.record(chat_id, text)
             for chunk in chunk_text(md_to_html(text)):
-                try:
-                    await update.message.reply_text(chunk, parse_mode=ParseMode.HTML)
-                except Exception:
-                    await update.message.reply_text(chunk)
+                await _send_reply(update, chunk)
             typing_task = asyncio.create_task(_keep_typing(context, chat_id))
     except asyncio.CancelledError:
         pass
@@ -1848,10 +1845,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             db_log(chat_id, "assistant", text)
             _flush_mgr.record(chat_id, text)
             for chunk in chunk_text(md_to_html(text)):
-                try:
-                    await update.message.reply_text(chunk, parse_mode=ParseMode.HTML)
-                except Exception:
-                    await update.message.reply_text(chunk)
+                await _send_reply(update, chunk)
             typing_task = asyncio.create_task(_keep_typing(context, chat_id))
     except asyncio.CancelledError:
         pass
@@ -1915,10 +1909,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             db_log(chat_id, "assistant", text)
             _flush_mgr.record(chat_id, text)
             for chunk in chunk_text(md_to_html(text)):
-                try:
-                    await update.message.reply_text(chunk, parse_mode=ParseMode.HTML)
-                except Exception:
-                    await update.message.reply_text(chunk)
+                await _send_reply(update, chunk)
             typing_task = asyncio.create_task(_keep_typing(context, chat_id))
     except asyncio.CancelledError:
         pass
@@ -1998,10 +1989,7 @@ async def _handle_pull(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     if reply and reply != "(no response)":
         for chunk in chunk_text(md_to_html(reply)):
-            try:
-                await update.message.reply_text(chunk, parse_mode=ParseMode.HTML)
-            except Exception:
-                await update.message.reply_text(chunk)
+            await _send_reply(update, chunk)
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -2062,10 +2050,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             _flush_mgr.record(chat_id, text)
 
             for chunk in chunk_text(md_to_html(text)):
-                try:
-                    await update.message.reply_text(chunk, parse_mode=ParseMode.HTML)
-                except Exception:
-                    await update.message.reply_text(chunk)
+                await _send_reply(update, chunk)
 
             typing_task = asyncio.create_task(_keep_typing(context, chat_id))
     except asyncio.CancelledError:
@@ -2077,6 +2062,28 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if _restart_requested:
         await asyncio.sleep(1)
         _do_restart()
+
+
+async def _send_reply(update: Update, chunk: str) -> None:
+    """Send one reply chunk. Falls back to plain text on HTML errors; retries once on network timeouts."""
+    import telegram.error as _tg_err
+    for attempt in range(2):
+        try:
+            await update.message.reply_text(chunk, parse_mode=ParseMode.HTML)
+            return
+        except _tg_err.BadRequest:
+            break  # HTML rejected — fall through to plain text below
+        except (_tg_err.TimedOut, _tg_err.NetworkError):
+            if attempt == 0:
+                await asyncio.sleep(2)
+                continue
+            return  # give up silently after retry
+        except Exception:
+            break  # unexpected error — try plain text
+    try:
+        await update.message.reply_text(chunk)
+    except Exception:
+        pass
 
 
 async def _keep_typing(context: ContextTypes.DEFAULT_TYPE, chat_id: int) -> None:
