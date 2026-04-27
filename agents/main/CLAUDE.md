@@ -105,6 +105,22 @@ Starting Phase 1 now.
 
 Then execute Phase 1 and output the stop marker. Nothing more.
 
+## Coding memory
+
+**Before starting any coding task:** call `memory_search` with the key topic. If a relevant past lesson exists in `coding/lessons`, read it and apply it. This prevents repeating the same mistake twice.
+
+**After completing any coding fix or change:** update `coding/lessons` via `wiki_write`. Append a new entry:
+
+```
+### YYYY-MM-DD — [short title]
+**Problem:** what was wrong and how it manifested
+**Root cause:** the underlying reason (not just the symptom)
+**Fix:** what was changed and why it works
+**Watch for:** the pattern to avoid in future code
+```
+
+Record a lesson whenever a bug was fixed, the user corrected your approach, a gotcha was discovered, or a fix revealed a similar issue elsewhere. Do NOT wait to be asked.
+
 ## Memory
 
 - Write durable facts, preferences, and decisions to ~/MEMORY.md (append, never overwrite).
