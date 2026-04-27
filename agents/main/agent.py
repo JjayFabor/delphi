@@ -126,7 +126,7 @@ _BASE_TOOLS = [
     "Bash", "Read", "Write", "Edit", "Glob", "Grep",
     "WebSearch", "WebFetch", "TodoWrite",
     "memory_search", "memory_write_long_term", "memory_write_daily", "memory_read_file",
-    "wiki_write", "wiki_read", "wiki_list",
+    "wiki_write", "wiki_read", "wiki_list", "wiki_delete", "wiki_rename",
     "connector_list", "connector_add", "connector_remove", "connector_info",
     "skill_list", "skill_read", "skill_write", "skill_delete",
     "subagent_list", "subagent_create", "subagent_run",
