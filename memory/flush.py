@@ -15,7 +15,7 @@ logger = logging.getLogger("memory.flush")
 
 # Trigger flush when estimated tokens exceed this threshold.
 # Conservative: better to flush too early than too late.
-FLUSH_THRESHOLD_TOKENS = 150_000
+FLUSH_THRESHOLD_TOKENS = 60_000
 
 # Estimated tokens per character (rough approximation)
 CHARS_PER_TOKEN = 4

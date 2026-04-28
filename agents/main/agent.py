@@ -116,8 +116,12 @@ TG_MAX_CHARS = 4000
 
 # Max seconds to wait for a Claude response before killing the subprocess.
 # Prevents the bot from freezing indefinitely on a stuck Claude process.
-# Override with CLAUDE_TIMEOUT_SECONDS in .env (default: 5 minutes).
-CLAUDE_TIMEOUT = int(os.getenv("CLAUDE_TIMEOUT_SECONDS", "300"))
+# Override with CLAUDE_TIMEOUT_SECONDS in .env (default: 20 minutes).
+CLAUDE_TIMEOUT = int(os.getenv("CLAUDE_TIMEOUT_SECONDS", "1200"))
+
+# Prefer the user's installed claude CLI over the SDK-bundled one.
+_SYSTEM_CLAUDE = shutil.which("claude")
+CLAUDE_CLI_PATH: str | None = os.getenv("CLAUDE_CLI_PATH") or _SYSTEM_CLAUDE
 
 # ── Tool allowlist ─────────────────────────────────────────────────────────────
 # MAIN_EXTRA_TOOLS in .env: comma-separated tool names to add on top of base set.
@@ -1349,6 +1353,18 @@ async def run_claude(prompt: str, chat_id: int, silent: bool = False) -> str:
     return reply or "(no response)"
 
 
+_AUTO_SAVE_PROMPT = """\
+[Auto-consolidation — do this silently before the next user message]
+
+Review what was just discussed and save anything new:
+- User preference, name, habit, or personal detail → learn(category="preference") or memory_write_long_term
+- Project/business fact, tech decision, schema note → wiki_write (path like "backend/schema") or learn(category="context")
+- Behavior rule the user stated ("always", "never", "from now on") → learn(category="behavior")
+- Bug fixed or mistake corrected → wiki_write("coding/lessons") appending the structured entry
+- Nothing new learned → respond with exactly: NO_REPLY
+"""
+
+
 async def stream_claude(prompt: str, chat_id: int, silent: bool = False, _attempt: int = 0):
     """
     Async generator — yields each assistant text block as Claude produces it.
@@ -1356,6 +1372,18 @@ async def stream_claude(prompt: str, chat_id: int, silent: bool = False, _attemp
     silent=True suppresses NO_REPLY (used for flush turns).
     """
     _current_chat_id.set(chat_id)
+
+    # Auto-inject relevant memory/wiki context so the bot always has it
+    # without needing to call memory_search manually.
+    if not silent and _mem_index:
+        mem_context = _mem_search(_mem_index, prompt, limit=3)
+        if mem_context and mem_context.strip():
+            prompt = (
+                f"[Relevant memory/wiki context — apply automatically]\n"
+                f"{mem_context}\n"
+                f"---\n\n"
+                f"{prompt}"
+            )
 
     # Inject any unacknowledged shared context as a system note
     shared = db_get_unacknowledged_shared(DB_PATH, chat_id)
@@ -1372,6 +1400,7 @@ async def stream_claude(prompt: str, chat_id: int, silent: bool = False, _attemp
     session_id = db_get_session(chat_id)
     system_prompt = build_system_prompt(prompt)
 
+    _allowed = _build_allowed_tools()
     options = sdk.ClaudeAgentOptions(
         model="claude-sonnet-4-6",
         system_prompt=system_prompt,
@@ -1380,7 +1409,8 @@ async def stream_claude(prompt: str, chat_id: int, silent: bool = False, _attemp
         permission_mode="bypassPermissions",
         setting_sources=["user"],
         mcp_servers={"memory": _memory_mcp},
-        allowed_tools=_build_allowed_tools(),
+        cli_path=CLAUDE_CLI_PATH,
+        **( {"allowed_tools": _allowed} if _allowed is not None else {} ),
     )
 
     new_session_id: Optional[str] = None
@@ -1455,6 +1485,11 @@ async def maybe_flush(chat_id: int) -> None:
     flush_prompt = _flush_mgr.flush_prompt(today)
     reply = await run_claude(flush_prompt, chat_id, silent=True)
     _flush_mgr.reset(chat_id)
+    # Drop the session so the next turn starts a fresh CLI process. Without
+    # this the resumed session keeps accumulating context in-process until the
+    # OOM killer terminates the bot.
+    db_delete_session(chat_id)
+    logger.info("Session cleared for chat %d after flush — next turn starts fresh", chat_id)
     if reply:
         logger.info("Flush produced output: %s...", reply[:60])
 
@@ -1470,12 +1505,14 @@ async def _probe_mcp() -> None:
     global _mcp_ready_event
     logger.info("MCP probe: initialising connections...")
     try:
+        _probe_allowed = _build_allowed_tools()
         options = sdk.ClaudeAgentOptions(
             cwd=str(WORKSPACE),
             permission_mode="bypassPermissions",
             setting_sources=["user"],
             mcp_servers={"memory": _memory_mcp},
-            allowed_tools=_build_allowed_tools(),
+            cli_path=CLAUDE_CLI_PATH,
+            **( {"allowed_tools": _probe_allowed} if _probe_allowed is not None else {} ),
         )
         async for event in sdk.query(prompt="Reply with the single word READY.", options=options):
             if isinstance(event, sdk.ResultMessage):
@@ -2059,9 +2096,23 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         typing_task.cancel()
         _untrack_task(chat_id)
 
+    # Fire a silent auto-save turn in the background after every conversation
+    # turn. The bot reviews what was discussed and saves new knowledge to
+    # memory/wiki without the user needing to ask.
+    asyncio.create_task(_auto_save(chat_id))
+
     if _restart_requested:
         await asyncio.sleep(1)
         _do_restart()
+
+
+async def _auto_save(chat_id: int) -> None:
+    """Silent post-turn consolidation — saves new knowledge learned this turn."""
+    try:
+        await run_claude(_AUTO_SAVE_PROMPT, chat_id, silent=True)
+        logger.debug("auto_save: completed for chat %d", chat_id)
+    except Exception as e:
+        logger.debug("auto_save: skipped for chat %d: %s", chat_id, e)
 
 
 async def _send_reply(update: Update, chunk: str) -> None:
